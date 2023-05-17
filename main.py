@@ -3,7 +3,10 @@ from utils import greedy_move
 
 def main():
 
-    env = Environment(10, 2, 3, 4, 5)
+    num_states = 10000  # adjust these values based on your problem
+    num_actions = 4
+
+    env = Environment(10, 2, 3, 4, 5, num_states, num_actions)
     num_turns_without_move = 0
 
     while not env.is_game_over():
@@ -20,7 +23,7 @@ def main():
             num_turns_without_move = 0
         if num_turns_without_move >= 10:
             break
-        env.display()
+        env.render()
         print("\n" + "="*10)
 
     print("Game Over. Remaining thieves: {}, remaining items: {}.".format(len(env.thieves), len(env.items)))
