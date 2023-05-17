@@ -56,6 +56,14 @@ class Environment(gym.Env):
         new_y = agent.y + dy
         reward = self.move(agent, new_x, new_y)
 
+        # If the action was invalid (reward is negative), choose a new action
+        while reward < 0:
+            action = agent.choose_action(state)
+            dx, dy = self._action_to_direction(action)
+            new_x = agent.x + dx
+            new_y = agent.y + dy
+            reward = self.move(agent, new_x, new_y)
+
         # Get next state
         next_state = self._get_state(agent)
 
@@ -118,21 +126,31 @@ class Environment(gym.Env):
 
     def move(self, agent, new_x, new_y):
         if new_x >= self.size or new_y >= self.size or new_x < 0 or new_y < 0 or isinstance(self.grid[new_x, new_y], Obstacle):
-            return False
+            return -1  # Penalty for trying to move out of the grid or into an obstacle
+
+        # Prevent a cop from moving to a cell that is already occupied by another cop
+        if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Cop):
+            return -1  # Penalty for trying to move into a cell occupied by another cop
+
         if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
             thief_to_remove = self.grid[new_x, new_y]
             self.grid[new_x, new_y] = None
             if thief_to_remove in self.thieves:
                 self.thieves.remove(thief_to_remove)
+            return 1  # Reward for catching a thief
+
         elif isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Item):
             item_to_remove = self.grid[new_x, new_y]
             self.grid[new_x, new_y] = None
             if item_to_remove in self.items:
                 self.items.remove(item_to_remove)
+            return 1  # Reward for stealing an item
+
         self.grid[agent.x, agent.y] = None
         self.grid[new_x, new_y] = agent
         agent.x, agent.y = new_x, new_y
-        return True
+        return 0  # No reward or penalty for moving to an empty cell
+
 
     def _get_observation(self):
         # Convert the current grid into an observation suitable for the observation space
