@@ -6,7 +6,9 @@ def main():
     num_states = 10000  # adjust these values based on your problem
     num_actions = 4
 
-    env = Environment(10, 2, 3, 4, 5, num_states, num_actions)
+    env = Environment(10, 2, 3, 4, 5)
+
+    max_turns_without_move = 10
     num_turns_without_move = 0
 
     while not env.is_game_over():
@@ -19,10 +21,11 @@ def main():
                 has_moved = True
         if not has_moved:
             num_turns_without_move += 1
+            if num_turns_without_move >= max_turns_without_move:
+                print("No movement for {} turns. Terminating...".format(max_turns_without_move))
+                break
         else:
             num_turns_without_move = 0
-        if num_turns_without_move >= 10:
-            break
         env.render()
         print("\n" + "="*10)
 
