@@ -1,36 +1,48 @@
 from environment import Environment
-from utils import greedy_move
 
 def main():
-
-    num_states = 10000  # adjust these values based on your problem
-    num_actions = 4
-
     env = Environment(10, 2, 3, 4, 5)
 
     max_turns_without_move = 10
     num_turns_without_move = 0
+    num_episodes = 3  # number of episodes for training
+    batch_size = 32   # mini-batch size for replay
 
-    while not env.is_game_over():
-        has_moved = False
-        for cop in env.cops:
-            if greedy_move(env, cop):
-                has_moved = True
-        for thief in env.thieves:
-            if greedy_move(env, thief):
-                has_moved = True
-        if not has_moved:
-            num_turns_without_move += 1
-            if num_turns_without_move >= max_turns_without_move:
-                print("No movement for {} turns. Terminating...".format(max_turns_without_move))
-                break
-        else:
-            num_turns_without_move = 0
-        env.render()
-        print("\n" + "="*10)
+    for episode in range(num_episodes):
+        env.reset()  # if you have implemented a reset method in your environment
 
-    print("Game Over. Remaining thieves: {}, remaining items: {}.".format(len(env.thieves), len(env.items)))
+        while not env.is_game_over():
+            has_moved = False
+            for cop in env.cops:
+                state = cop.get_state()
+                action = cop.choose_action(state)
+                new_state, reward, done, _ = cop.step(action)
+                if new_state is not None:
+                    has_moved = True
+                    if len(cop.memory) > batch_size:
+                        cop.replay(batch_size)
+            for thief in env.thieves:
+                state = thief.get_state()
+                action = thief.choose_action(state)
+                new_state, reward, done, _ = thief.step(action)
+                if new_state is not None:
+                    has_moved = True
+                    if len(thief.memory) > batch_size:
+                        thief.replay(batch_size)
+            if not has_moved:
+                num_turns_without_move += 1
+                if num_turns_without_move >= max_turns_without_move:
+                    print(f"No movement for {max_turns_without_move} turns. Terminating...")
+                    break
+            else:
+                num_turns_without_move = 0
+            env.render()
+            print("\n" + "="*10)
+
+        print(f"End of episode {episode}. Remaining thieves: {len(env.thieves)}, remaining items: {len(env.items)}.")
 
 if __name__ == "__main__":
     main()
+
+
 

@@ -45,22 +45,30 @@ class Environment(gym.Env):
         return entity
 
                 
-    def step(self, agent):
-        # Agent chooses action
-        action = agent.choose_action()
+    def step(self):
+        done = False
+        rewards = []
+        new_states = []
+        dones = []
+        
+        for cop in self.cops:
+            action = cop.choose_action(cop.get_state())
+            new_state, reward, done, _ = cop.step(action)
+            rewards.append(reward)
+            new_states.append(new_state)
+            dones.append(done)
 
-        # Agent executes the action, returning new state and reward
-        new_state, reward = agent.step(action)
+        for thief in self.thieves:
+            action = thief.choose_action(thief.get_state())
+            new_state, reward, done, _ = thief.step(action)
+            rewards.append(reward)
+            new_states.append(new_state)
+            dones.append(done)
 
-        # If the action was invalid (reward is negative), choose a new action
-        while reward < 0:
-            action = agent.choose_action()
-            new_state, reward = agent.step(action)
+        if self.is_game_over():
+            done = True
 
-        # Check if the game is over
-        done = self.is_game_over()
-
-        return new_state, reward, done
+        return new_states, rewards, dones, {}
 
     def _get_state(self, agent):
         # Define the state as the relative position of the agent and its target.
@@ -87,29 +95,28 @@ class Environment(gym.Env):
     
 
     def reset(self):
-        # Reset the state of the environment to an initial state
         self.grid = np.empty((self.size, self.size), dtype=object)
-        self.cops = [self._place_on_grid(Cop) for _ in range(len(self.cops))]
-        self.thieves = [self._place_on_grid(Thief) for _ in range(len(self.thieves))]
-        self.items = [self._place_on_grid(Item) for _ in range(len(self.items))]
-        self.obstacles = [self._place_on_grid(Obstacle) for _ in range(len(self.obstacles))]
+        self._reset_positions(self.cops)
+        self._reset_positions(self.thieves)
+        self._reset_positions(self.items)
+        self._reset_positions(self.obstacles)
+        return [agent.get_state() for agent in (self.cops + self.thieves)]
 
-        return self._get_observation()
+    def _reset_positions(self, entities):
+        for entity in entities:
+            unoccupied_cells = np.argwhere(self.grid == None)
+            idx = np.random.choice(unoccupied_cells.shape[0])
+            x, y = unoccupied_cells[idx]
+            self.grid[entity.x, entity.y] = None  # Clear old position
+            self.grid[x, y] = entity
+            entity.x = x
+            entity.y = y
 
     def _action_to_direction(self, action):
         # Convert action index to movement
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # up, down, left, right
         return directions[action]
 
-    def _calculate_reward(self):
-        # Calculate the reward based on the current state of the environment
-        # Modify this method according to your reward scheme
-        reward = 0
-        if len(self.thieves) == 0:
-            reward += 100  # High reward for catching all thieves
-        if len(self.items) == 0:
-            reward += 50   # Moderate reward for collecting all items
-        return reward
 
     def calculate_reward(self, agent, new_x, new_y):
         if new_x >= self.size or new_y >= self.size or new_x < 0 or new_y < 0 or isinstance(self.grid[new_x, new_y], Obstacle):
