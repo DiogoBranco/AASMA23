@@ -1,5 +1,6 @@
 import numpy as np
 import random
+from game_objects import Item
 from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense, Flatten
@@ -23,18 +24,34 @@ class Agent:
 
     def build_model(self):
         model = Sequential()
-        model.add(Flatten(input_shape=(self.state_space.shape)))
+        model.add(Dense(24, activation='relu', input_shape=(self.state_space.shape[0]*self.state_space.shape[1],)))
         model.add(Dense(24, activation='relu'))
-        model.add(Dense(24, activation='relu'))
-        model.add(Dense(self.action_space.n, activation='softmax'))
-        model.compile(loss='cross_entropy', optimizer=Adam())
+        model.add(Dense(self.action_space.n, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam())
         return model
+
 
     def get_state(self):
         padded_grid = np.pad(self.env.grid, self.field_of_view, mode='constant', constant_values=0)
         view_grid = padded_grid[self.y:self.y + 2*self.field_of_view + 1,
                         self.x:self.x + 2*self.field_of_view + 1]
-        return np.reshape(view_grid, [1, self.state_space.shape[0], self.state_space.shape[1], 1])
+
+        # Transform grid items into numeric values
+        view_grid_transformed = np.zeros_like(view_grid, dtype=np.float32)
+        for i in range(view_grid.shape[0]):
+            for j in range(view_grid.shape[1]):
+                if isinstance(view_grid[i, j], Cop):
+                    view_grid_transformed[i, j] = 1
+                elif isinstance(view_grid[i, j], Thief):
+                    view_grid_transformed[i, j] = 2
+                elif isinstance(view_grid[i, j], Item):
+                    view_grid_transformed[i, j] = 3
+                else:
+                    view_grid_transformed[i, j] = 0
+
+        return np.reshape(view_grid_transformed, [1, -1])
+
+
 
 
     def choose_action(self, state):
@@ -47,22 +64,17 @@ class Agent:
         self.memory.append((np.copy(state), action, reward, np.copy(next_state), done))
 
     def replay(self, batch_size):
+        if len(self.memory) < batch_size:
+            return
+
         minibatch = random.sample(self.memory, batch_size)
-
-        states = np.array([val[0] for val in minibatch], dtype=np.float32)
-        actions = np.array([val[1] for val in minibatch], dtype=np.float32)
-        rewards = np.array([val[2] for val in minibatch], dtype=np.float32)
-        next_states = np.array([(np.zeros(self.state_space.shape)
-                                if val[4] else val[3]) for val in minibatch], dtype=np.float32)
-
-        targets = rewards + self.gamma * np.amax(self.model.predict_on_batch(next_states), axis=1)
-        targets_full = self.model.predict_on_batch(states)
-
-        ind = np.array([i for i in range(batch_size)])
-        targets_full[[ind], [actions]] = targets
-
-        self.model.train_on_batch(states, targets_full)
-
+        for state, action, reward, next_state, done in minibatch:
+            target = reward
+            if not done:
+                target = (reward + self.gamma * np.amax(self.model.predict(next_state.reshape(1, -1))[0]))
+            target_f = self.model.predict(state.reshape(1, -1))
+            target_f[0][action] = target
+            self.model.fit(state[None, :], target_f, epochs=1, verbose=0)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
