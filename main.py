@@ -1,34 +1,30 @@
 from environment import Environment
 
 def main():
-    env = Environment(10, 2, 3, 4, 5)
+    env = Environment(10, 2, 2, 4, 5)
 
     max_turns_without_move = 10
     num_turns_without_move = 0
-    num_episodes = 3  # number of episodes for training
+    num_episodes = 1  # number of episodes for training
     batch_size = 32   # mini-batch size for replay
+
+    def handle_agents(agents):
+        has_moved = False
+        for agent in agents:
+            state = agent.get_state()
+            action = agent.choose_action(state)
+            new_state, reward, done, _ = agent.step(action)
+            if new_state is not None:
+                has_moved = True
+                if len(agent.memory) > batch_size:
+                    agent.replay(batch_size)
+        return has_moved
 
     for episode in range(num_episodes):
         env.reset()  # if you have implemented a reset method in your environment
 
         while not env.is_game_over():
-            has_moved = False
-            for cop in env.cops:
-                state = cop.get_state()
-                action = cop.choose_action(state)
-                new_state, reward, done, _ = cop.step(action)
-                if new_state is not None:
-                    has_moved = True
-                    if len(cop.memory) > batch_size:
-                        cop.replay(batch_size)
-            for thief in env.thieves:
-                state = thief.get_state()
-                action = thief.choose_action(state)
-                new_state, reward, done, _ = thief.step(action)
-                if new_state is not None:
-                    has_moved = True
-                    if len(thief.memory) > batch_size:
-                        thief.replay(batch_size)
+            has_moved = handle_agents(env.cops) or handle_agents(env.thieves)
             if not has_moved:
                 num_turns_without_move += 1
                 if num_turns_without_move >= max_turns_without_move:

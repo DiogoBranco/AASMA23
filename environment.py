@@ -27,7 +27,7 @@ class Environment(gym.Env):
         # Example when using discrete actions, Box for continuous
         self.action_space = spaces.Discrete(4)
 
-        # Observation is the grid itself
+        # Observation is the grid itself 
         self.observation_space = spaces.Box(low=0, high=1,
                                             shape=(self.size, self.size, 1), dtype=np.int)
 
@@ -51,16 +51,11 @@ class Environment(gym.Env):
         new_states = []
         dones = []
         
-        for cop in self.cops:
-            action = cop.choose_action(cop.get_state())
-            new_state, reward, done, _ = cop.step(action)
-            rewards.append(reward)
-            new_states.append(new_state)
-            dones.append(done)
+        actions = [agent.choose_action(agent.get_state()) for agent in (self.cops + self.thieves)]
 
-        for thief in self.thieves:
-            action = thief.choose_action(thief.get_state())
-            new_state, reward, done, _ = thief.step(action)
+        for idx, agent in enumerate(self.cops + self.thieves):
+            action = actions[idx]
+            new_state, reward, done, _ = agent.step(action)
             rewards.append(reward)
             new_states.append(new_state)
             dones.append(done)
@@ -70,28 +65,47 @@ class Environment(gym.Env):
 
         return new_states, rewards, dones, {}
 
+    def get_observation(self):
+        # Convert the current grid into an observation suitable for the observation space
+        # This is a placeholder implementation, you may need to modify it to suit your needs
+        observation = np.zeros((self.size, self.size, 1), dtype=np.int)
+        for i in range(self.size):
+            for j in range(self.size):
+                cell = self.grid[i, j]
+                if isinstance(cell, Cop):
+                    observation[i, j, 0] = 1
+                elif isinstance(cell, Thief):
+                    observation[i, j, 0] = 2
+                elif isinstance(cell, Item):
+                    observation[i, j, 0] = 3
+                elif isinstance(cell, Obstacle):
+                    observation[i, j, 0] = 4
+        return observation
+
     def _get_state(self, agent):
-        # Define the state as the relative position of the agent and its target.
-        if isinstance(agent, Cop):
-            target = nearest_thief(self, agent)
-        elif isinstance(agent, Thief):
-            target = nearest_item(self, agent)
-        else:
-            return None
-
-        if target is None:
-            # If there is no target, return a default state.
-            return 0
-
-        # Calculate the relative positions.
-        dx = agent.x - target.x
-        dy = agent.y - target.y
-
-        # Convert the relative positions to a single index.
-        # This assumes that the maximum size of the grid is 100.
-        # You should adjust this according to your actual grid size.
-        state = dx * 100 + dy
+        # Initialize the state as a 2D array filled with zeros.
+        state = np.zeros((agent.field_of_view * 2 + 1, agent.field_of_view * 2 + 1), dtype=int)
+    
+        # Calculate the bounds of the field of view.
+        start_x = max(0, agent.x - agent.field_of_view)
+        start_y = max(0, agent.y - agent.field_of_view)
+        end_x = min(self.size, agent.x + agent.field_of_view + 1)
+        end_y = min(self.size, agent.y + agent.field_of_view + 1)
+    
+        # Populate the state array with the contents of the grid within the field of view.
+        for i in range(start_x, end_x):
+            for j in range(start_y, end_y):
+                cell = self.grid[i, j]
+                if isinstance(cell, Cop):
+                    state[i - start_x, j - start_y] = 1
+                elif isinstance(cell, Thief):
+                    state[i - start_x, j - start_y] = 2
+                elif isinstance(cell, Item):
+                    state[i - start_x, j - start_y] = 3
+                elif isinstance(cell, Obstacle):
+                    state[i - start_x, j - start_y] = 4
         return state
+
     
 
     def reset(self):
@@ -134,25 +148,34 @@ class Environment(gym.Env):
 
         return 0  # No reward or penalty for moving to an empty cell
 
+    def remove_thief(self, thief):
+        self.grid[thief.x, thief.y] = None
+        self.thieves.remove(thief)
+
+    def remove_item(self, item):
+        self.grid[item.x, item.y] = None
+        self.items.remove(item)
+
     def move_agent(self, agent, new_x, new_y):
+        if isinstance(self.grid[new_x, new_y], Obstacle):
+            return -1
         # Handle catching a thief by a cop
         if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
             thief_to_remove = self.grid[new_x, new_y]
-            self.grid[new_x, new_y] = None
-            if thief_to_remove in self.thieves:
-                self.thieves.remove(thief_to_remove)
+            self.remove_thief(thief_to_remove)  # Call remove_thief method
+            return 1
 
         # Handle stealing an item by a thief
         elif isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Item):
             item_to_remove = self.grid[new_x, new_y]
-            self.grid[new_x, new_y] = None
-            if item_to_remove in self.items:
-                self.items.remove(item_to_remove)
+            self.remove_item(item_to_remove)  # Call remove_item method
+            return 1
 
         # Moving the agent
         self.grid[agent.x, agent.y] = None
         self.grid[new_x, new_y] = agent
         agent.x, agent.y = new_x, new_y
+        return 0
 
     def move(self, agent, new_x, new_y):
         reward = self.calculate_reward(agent, new_x, new_y)

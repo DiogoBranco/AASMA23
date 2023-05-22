@@ -1,4 +1,6 @@
 import numpy as np
+import random
+from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense, Flatten
 from keras.optimizers import Adam
@@ -17,15 +19,15 @@ class Agent:
         self.epsilon = 1.0  # exploration rate
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.memory = []
+        self.memory = deque(maxlen=2000)
 
     def build_model(self):
         model = Sequential()
         model.add(Flatten(input_shape=(self.state_space.shape)))
         model.add(Dense(24, activation='relu'))
         model.add(Dense(24, activation='relu'))
-        model.add(Dense(self.action_space.n, activation='linear'))
-        model.compile(loss='mse', optimizer=Adam())
+        model.add(Dense(self.action_space.n, activation='softmax'))
+        model.compile(loss='cross_entropy', optimizer=Adam())
         return model
 
     def get_state(self):
@@ -42,19 +44,35 @@ class Agent:
         return np.argmax(act_values[0])  
 
     def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
+        self.memory.append((np.copy(state), action, reward, np.copy(next_state), done))
 
     def replay(self, batch_size):
-        minibatch = np.random.choice(self.memory, batch_size)
-        for state, action, reward, next_state, done in minibatch:
-            target = reward
-            if not done:
-                target += self.gamma * np.amax(self.model.predict(next_state)[0])
-            target_f = self.model.predict(state)
-            target_f[0][action] = target
-            self.model.fit(state, target_f, epochs=1, verbose=0)
+        minibatch = random.sample(self.memory, batch_size)
+
+        states = np.array([val[0] for val in minibatch], dtype=np.float32)
+        actions = np.array([val[1] for val in minibatch], dtype=np.float32)
+        rewards = np.array([val[2] for val in minibatch], dtype=np.float32)
+        next_states = np.array([(np.zeros(self.state_space.shape)
+                                if val[4] else val[3]) for val in minibatch], dtype=np.float32)
+
+        targets = rewards + self.gamma * np.amax(self.model.predict_on_batch(next_states), axis=1)
+        targets_full = self.model.predict_on_batch(states)
+
+        ind = np.array([i for i in range(batch_size)])
+        targets_full[[ind], [actions]] = targets
+
+        self.model.train_on_batch(states, targets_full)
+
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+
+
+    def step(self, action):
+        raise NotImplementedError("This method should be overridden by child classes")
+
+class Cop(Agent):
+    def __init__(self, x, y, env, field_of_view):
+        super().__init__(x, y, env, field_of_view)
 
     def step(self, action):
         # Get current state
@@ -63,13 +81,18 @@ class Agent:
         # Convert action into a direction
         dx, dy = self.env._action_to_direction(action)
 
-        # Get the reward from the environment for the proposed move
+        # Try to move the agent
         reward = self.env.move(self, self.x + dx, self.y + dy)
-        
-        if reward >= 0:
-            # Only update position if the move was valid (reward >= 0)
-            self.x += dx
-            self.y += dy
+
+         # If a thief is caught, remove it
+        thieves_to_remove = []
+        for thief in self.env.thieves[:]:  # Assuming the environment keeps a list of thieves
+            if thief.x == self.x + dx and thief.y == self.y + dy:  
+                thieves_to_remove.append(thief)
+                reward = 1  # Define your reward for catching a thief
+
+        for thief in thieves_to_remove:
+            self.env.remove_thief(thief)
 
         # Get the next state
         next_state = self.get_state()
@@ -79,11 +102,35 @@ class Agent:
 
         return next_state, reward, done, {}
 
-class Cop(Agent):
-    def __init__(self, x, y, env, field_of_view):
-        super().__init__(x, y, env, field_of_view)
-
 class Thief(Agent):
     def __init__(self, x, y, env, field_of_view):
         super().__init__(x, y, env, field_of_view)
+
+    def step(self, action):
+        # Get current state
+        state = self.get_state()
+
+        # Convert action into a direction
+        dx, dy = self.env._action_to_direction(action)
+
+        # Try to move the agent
+        reward = self.env.move(self, self.x + dx, self.y + dy)
+
+        # If an item is found, remove it
+        items_to_remove = []
+        for item in self.env.items[:]:  # Assuming the environment keeps a list of items
+            if item.x == self.x + dx and item.y == self.y + dy:  
+                items_to_remove.append(item)
+                reward = 1  # Define your reward for stealing an item
+
+        for item in items_to_remove:
+            self.env.remove_item(item)
+
+        # Get the next state
+        next_state = self.get_state()
+
+        done = self.env.is_game_over()
+        self.remember(state, action, reward, next_state, done)
+
+        return next_state, reward, done, {}
 
