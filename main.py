@@ -1,44 +1,51 @@
 from environment import Environment
 
-def main():
-    env = Environment(10, 2, 2, 4, 5)
+class Simulation:
+    def __init__(self, env, batch_size):
+        self.env = env
+        self.batch_size = batch_size
+        self.max_turns_without_move = 10
+        self.num_turns_without_move = 0
 
-    max_turns_without_move = 10
-    num_turns_without_move = 0
-    num_episodes = 1  # number of episodes for training
-    batch_size = 32   # mini-batch size for replay
-
-    def handle_agents(agents):
+    def handle_agents(self, agents, training=True):
         has_moved = False
         for agent in agents:
-            state = agent.get_state()
-            action = agent.choose_action(state)
-            new_state, reward, done, _ = agent.step(action)
+            state = agent.get_agent_view().reshape(agent.dqn_agent.model_input_shape)
+            action = agent.act(state)
+            new_state, reward, done, info = agent.step(action)
             if new_state is not None:
-                has_moved = True
-                if len(agent.memory) > batch_size:
-                    agent.replay(batch_size)
+                new_state = new_state.reshape(agent.dqn_agent.model_input_shape)
+                has_moved = info['has_moved']
+                if training and len(agent.dqn_agent.memory) > self.batch_size:
+                    agent.replay(self.batch_size)
         return has_moved
 
-    for episode in range(num_episodes):
-        env.reset()  # if you have implemented a reset method in your environment
+    def run_episode(self, num_episodes, training=True):
+        for episode in range(num_episodes):
+            self.env.reset()
+            while not self.env.is_game_over():
+                has_moved = self.handle_agents(self.env.cops, training) or self.handle_agents(self.env.thieves, training)
+                if not has_moved:
+                    self.num_turns_without_move += 1
+                    if self.num_turns_without_move >= self.max_turns_without_move:
+                        print(f"No movement for {self.max_turns_without_move} turns. Terminating...")
+                        break
+                else:
+                    self.num_turns_without_move = 0
 
-        while not env.is_game_over():
-            has_moved = handle_agents(env.cops) or handle_agents(env.thieves)
-            if not has_moved:
-                num_turns_without_move += 1
-                if num_turns_without_move >= max_turns_without_move:
-                    print(f"No movement for {max_turns_without_move} turns. Terminating...")
-                    break
-            else:
-                num_turns_without_move = 0
-            env.render()
-            print("\n" + "="*10)
+            print(f"End of {'training' if training else 'evaluation'} episode {episode}. Remaining thieves: {len(self.env.thieves)}, remaining items: {len(self.env.items)}.")
 
-        print(f"End of episode {episode}. Remaining thieves: {len(env.thieves)}, remaining items: {len(env.items)}.")
+
+def main():
+    env = Environment(10, 2, 2, 4, 5)
+    simulation = Simulation(env, batch_size=32)
+    simulation.run_episode(num_episodes=1, training=True)  # Training phase
+    simulation.run_episode(num_episodes=1, training=False)  # Evaluation phase
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

@@ -1,49 +1,41 @@
 from agent import Cop, Thief
 import numpy as np
 
-def random_move(env, agent):
-        directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]  # right, left, down, up
-        np.random.shuffle(directions)
-        for dx, dy in directions:
-            new_x = agent.x + dx
-            new_y = agent.y + dy
-            env.move(agent, new_x, new_y)
-            break    
+def get_distance(agent1, agent2):
+    return abs(agent1.x - agent2.x) + abs(agent1.y - agent2.y)
+
+def is_within_view(agent1, agent2, field_of_view):
+    return get_distance(agent1, agent2) <= field_of_view
+
+def nearest_agent(env, agent_list, agent):
+    min_distance = float('inf')
+    nearest_agent = None
+    for agent_to_compare in agent_list:
+        if is_within_view(agent, agent_to_compare, agent.field_of_view):
+            distance = get_distance(agent, agent_to_compare)
+            if distance < min_distance:
+                min_distance = distance
+                nearest_agent = agent_to_compare
+    return nearest_agent
 
 def nearest_item(env, agent):
-    min_distance = float('inf')
-    nearest_item = None
-    for item in env.items:
-        distance = abs(agent.x - item.x) + abs(agent.y - item.y)
-        if distance <= agent.field_of_view and distance < min_distance:
-            min_distance = distance
-            nearest_item = item
-    return nearest_item
+    return nearest_agent(env, env.items, agent)
 
 def nearest_thief(env, agent):
-    min_distance = float('inf')
-    nearest_thief = None
-    for thief in env.thieves:
-        distance = abs(agent.x - thief.x) + abs(agent.y - thief.y)
-        if distance <= agent.field_of_view and distance < min_distance:
-            min_distance = distance
-            nearest_thief = thief
-    return nearest_thief
+    return nearest_agent(env, env.thieves, agent)
 
-def greedy_move(env, agent):
-    if isinstance(agent, Cop):
-        target = nearest_thief(env, agent)
-    elif isinstance(agent, Thief):
-        target = nearest_item(env, agent)
-    else:
-        return
+def nearest_cop(env, agent):
+    return nearest_agent(env, env.cops, agent)
 
-    if target is None:
-        random_move(env, agent)
+def nearest_obstacle(env, agent):
+    return nearest_agent(env, env.obstacles, agent)
+
+def get_direction(agent1, agent2):
+    dx = agent2.x - agent1.x
+    dy = agent2.y - agent1.y
+
+    if abs(dx) > abs(dy):
+        return (1, 0) if dx > 0 else (-1, 0)
     else:
-        dx = np.sign(target.x - agent.x)
-        dy = np.sign(target.y - agent.y)
-        if dx != 0 and not env.move(agent, agent.x + dx, agent.y):
-            random_move(env, agent)
-        elif dy != 0 and not env.move(agent, agent.x, agent.y + dy):
-            random_move(env, agent)
+        return (0, 1) if dy > 0 else (0, -1)
+
