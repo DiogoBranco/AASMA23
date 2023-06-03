@@ -12,7 +12,7 @@ class Environment(gym.Env):
             raise ValueError("Not enough cells for the required objects")
 
         self.size = size
-        self.grid = np.empty((size, size), dtype=object)
+        self.grid = np.full((size, size), None, dtype=object) # Change from np.empty to np.full to initialize with None
         
         self.action_space = spaces.Discrete(4)
         state_shape = ((2*3+1), (2*3+1))
@@ -29,12 +29,13 @@ class Environment(gym.Env):
         if unoccupied_cells.size == 0:
             raise ValueError("The grid is full, cannot place more entities.")
         idx = np.random.choice(unoccupied_cells.shape[0])
-        x, y = unoccupied_cells[idx]
+        y, x = unoccupied_cells[idx]  # Change to ensure correct indexing
         if entity_type in [Cop, Thief]:
             entity = entity_type(x, y, self, field_of_view, state_shape, action_size)
         else:
             entity = entity_type(x, y)
-        self.grid[x, y] = entity
+        if self.grid[y, x] == None:
+            self.grid[y, x] = entity  # Change to ensure correct indexing
         return entity
 
     def step(self):
@@ -48,22 +49,25 @@ class Environment(gym.Env):
         return new_states, rewards, dones, {}
 
     def reset(self):
-        self.grid = np.empty((self.size, self.size), dtype=object)
-        self._reset_positions(self.cops)
-        self._reset_positions(self.thieves)
-        self._reset_positions(self.items)
-        self._reset_positions(self.obstacles)
+        padding_size = max(agent.field_of_view for agent in (self.cops + self.thieves))
+        self.grid = np.full((self.size + 2 * padding_size, self.size + 2 * padding_size), None, dtype=object)
+        self._reset_positions(self.cops, padding_size)
+        self._reset_positions(self.thieves, padding_size)
+        self._reset_positions(self.items, padding_size)
+        self._reset_positions(self.obstacles, padding_size)
         return [agent.get_agent_view() for agent in (self.cops + self.thieves)]
 
-    def _reset_positions(self, entities):
+    def _reset_positions(self, entities, padding_size):
         for entity in entities:
             unoccupied_cells = np.argwhere(self.grid == None)
+            if unoccupied_cells.size == 0:
+                raise ValueError("The grid is full, cannot reset positions.")
             idx = np.random.choice(unoccupied_cells.shape[0])
-            x, y = unoccupied_cells[idx]
-            self.grid[entity.x, entity.y] = None  # Clear old position
-            self.grid[x, y] = entity
-            entity.x = x
-            entity.y = y
+            y, x = unoccupied_cells[idx]
+            if self.grid[y, x] == None:
+                self.grid[entity.y, entity.x] = None
+                self.grid[y, x] = entity
+                entity.y, entity.x = y + padding_size, x + padding_size
 
     def _action_to_direction(self, action):
         if action == 0:
@@ -77,23 +81,30 @@ class Environment(gym.Env):
         else:
             raise ValueError(f"Invalid action {action}")
 
-    def move_agent(self, agent, new_x, new_y):
-        if isinstance(self.grid[new_x, new_y], Obstacle):
-            return -1
+    def move_agent(self, agent, new_y, new_x):  # Change to ensure correct indexing
+        # Boundary check
+        if new_y < 0 or new_y >= self.grid.shape[0] or new_x < 0 or new_x >= self.grid.shape[1] or isinstance(self.grid[new_y, new_x], Obstacle):
+            return -1  # Invalid move
+
         # Handle catching a thief by a cop
-        if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
-            self.grid[new_x, new_y] = None
+        if isinstance(agent, Cop) and isinstance(self.grid[new_y, new_x], Thief):
+            self.grid[new_y, new_x] = agent
+            self.grid[agent.y, agent.x] = None
+            agent.y, agent.x = new_y, new_x
             return 1
 
         # Handle stealing an item by a thief
-        elif isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Item):
-            self.grid[new_x, new_y] = None
+        elif isinstance(agent, Thief) and isinstance(self.grid[new_y, new_x], Item):
+            self.grid[new_y, new_x] = agent
+            self.grid[agent.y, agent.x] = None
+            agent.y, agent.x = new_y, new_x
             return 1
 
         # Moving the agent
-        self.grid[agent.x, agent.y] = None
-        self.grid[new_x, new_y] = agent
-        agent.x, agent.y = new_x, new_y
+        if self.grid[new_y, new_x] == None:
+            self.grid[agent.y, agent.x] = None
+            self.grid[new_y, new_x] = agent
+            agent.y, agent.x = new_y, new_x
         return 0
 
     def is_game_over(self):
@@ -123,3 +134,4 @@ class Environment(gym.Env):
     def close(self):
         # Perform any necessary cleanup
         pass
+

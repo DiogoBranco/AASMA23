@@ -64,6 +64,7 @@ class DQNAgent:
     def act(self, state):
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
+        state = np.reshape(state, [1, -1])  # reshaping the state
         act_values = self.model.predict(state)
         return np.argmax(act_values[0])
 
@@ -81,20 +82,34 @@ class DQNAgent:
         return history
 
 class Agent:
-    def __init__(self, x, y, env, field_of_view, state_shape, action_size):
+    def __init__(self, y, x, env, field_of_view, state_shape, action_size):  # Swap x and y
+        self.y = y  # Swap x and y
         self.x = x
-        self.y = y
         self.env = env
         self.field_of_view = field_of_view
+
+        # Ensure that the DQN model's input shape matches the agent's field of view
+        assert state_shape == (2*field_of_view+1, 2*field_of_view+1), \
+               f"Expected state_shape to be {(2*field_of_view+1, 2*field_of_view+1)}, but got {state_shape}"
+
+         # Ensure that the field of view is 3
+        assert self.field_of_view == 3, f"Expected field_of_view to be 3, but got {self.field_of_view}"
+
         self.dqn_agent = DQNAgent(state_shape, action_size)
 
     def act(self, state):
         return self.dqn_agent.act(state)
 
     def get_agent_view(self):
-        padded_grid = np.pad(self.env.grid, self.field_of_view, mode='constant', constant_values=0)
-        view_grid = padded_grid[self.y:self.y + 2*self.field_of_view + 1,
-                        self.x:self.x + 2*self.field_of_view + 1]
+        # Extract the agent's field of view from the grid
+        view_grid = self.env.grid[max(0, self.y-self.field_of_view):min(self.env.grid.shape[0], self.y+self.field_of_view + 1),
+                                max(0, self.x-self.field_of_view):min(self.env.grid.shape[1], self.x+self.field_of_view + 1)]
+
+        # If the agent is near the edge of the grid, pad the view grid with zeros
+        if view_grid.shape[0] < 2*self.field_of_view + 1 or view_grid.shape[1] < 2*self.field_of_view + 1:
+            padding = ((max(0, self.field_of_view - self.y), max(0, self.y + self.field_of_view + 1 - self.env.grid.shape[0])),
+                        (max(0, self.field_of_view - self.x), max(0, self.x + self.field_of_view + 1 - self.env.grid.shape[1])))
+            view_grid = np.pad(view_grid, padding, 'constant', constant_values=0)
 
         # Transform grid items into numeric values
         view_grid_transformed = np.zeros_like(view_grid, dtype=np.float32)
@@ -109,7 +124,8 @@ class Agent:
                 else:
                     view_grid_transformed[i, j] = 0
 
-        return np.reshape(view_grid_transformed, (1,) + self.dqn_agent.model_input_shape)  # New line
+        return np.reshape(view_grid_transformed, (1,) + self.dqn_agent.model_input_shape)
+
 
     def replay(self, batch_size):
         self.dqn_agent.replay(batch_size)
@@ -118,18 +134,24 @@ class Agent:
         raise NotImplementedError("This method should be overridden by child classes")
 
 class Cop(Agent):
-    def __init__(self, x, y, env, field_of_view, state_shape, action_size):
-        super().__init__(x, y, env, field_of_view, state_shape, action_size)
+    def __init__(self, y, x, env, field_of_view, state_shape, action_size):  # Swap x and y
+        super().__init__(y, x, env, field_of_view, state_shape, action_size)
 
     def step(self, action):
         # Get current state
         state = self.get_agent_view()
 
         # Convert action into a direction
-        dx, dy = self.env._action_to_direction(action)
+        dy, dx = self.env._action_to_direction(action)  # Change to match new coordinate system
+
+        # Save current position
+        prev_y, prev_x = self.y, self.x  # Swap x and y
 
         # Try to move the agent and get the reward
-        reward = self.env.move_agent(self, self.x + dx, self.y + dy)
+        reward = self.env.move_agent(self, self.y + dy, self.x + dx)  # Change to match new coordinate system
+
+        # Check if agent has moved
+        has_moved = (prev_y != self.y) or (prev_x != self.x)  # Swap x and y
 
         # Get the next state
         next_state = self.get_agent_view()
@@ -137,21 +159,27 @@ class Cop(Agent):
         done = self.env.is_game_over()
         self.dqn_agent.remember(state, action, reward, next_state, done)
 
-        return next_state, reward, done, {}
+        return next_state, reward, done, {'has_moved': has_moved}
 
 class Thief(Agent):
-    def __init__(self, x, y, env, field_of_view, state_shape, action_size):
-        super().__init__(x, y, env, field_of_view, state_shape, action_size)
+    def __init__(self, y, x, env, field_of_view, state_shape, action_size):  # Swap x and y
+        super().__init__(y, x, env, field_of_view, state_shape, action_size)
 
     def step(self, action):
         # Get current state
         state = self.get_agent_view()
 
         # Convert action into a direction
-        dx, dy = self.env._action_to_direction(action)
+        dy, dx = self.env._action_to_direction(action)  # Change to match new coordinate system
+
+        # Save current position
+        prev_y, prev_x = self.y, self.x  # Swap x and y
 
         # Try to move the agent and get the reward
-        reward = self.env.move_agent(self, self.x + dx, self.y + dy)
+        reward = self.env.move_agent(self, self.y + dy, self.x + dx)  # Change to match new coordinate system
+
+        # Check if agent has moved
+        has_moved = (prev_y != self.y) or (prev_x != self.x)  # Swap x and y
 
         # Get the next state
         next_state = self.get_agent_view()
@@ -159,6 +187,6 @@ class Thief(Agent):
         done = self.env.is_game_over()
         self.dqn_agent.remember(state, action, reward, next_state, done)
 
-        return next_state, reward, done, {}
+        return next_state, reward, done, {'has_moved': has_moved}
 
 
