@@ -88,6 +88,15 @@ class Cop(Agent):
         reward = self.env.move(self, self.x + dx, self.y + dy)
         print(f"Attempted to move cop to ({self.x + dx}, {self.y + dy}). Reward received: {reward}")
 
+        # If the move was unsuccessful, try other actions
+        if reward == -1:
+            for new_action in range(self.action_space.n):
+                if new_action != action:
+                    dx, dy = self.env._action_to_direction(new_action)
+                    reward = self.env.move(self, self.x + dx, self.y + dy)
+                    if reward != -1:
+                        break
+
          # If a thief is caught, remove it
         thieves_to_remove = []
         for thief in self.env.thieves[:]:  # Assuming the environment keeps a list of thieves
@@ -124,6 +133,14 @@ class Thief(Agent):
         reward = self.env.move(self, self.x + dx, self.y + dy)
         print(f"Attempted to move thief to ({self.x + dx}, {self.y + dy}). Reward received: {reward}")
 
+        # If the move was unsuccessful, try other actions
+        if reward == -1:
+            for new_action in range(self.action_space.n):
+                if new_action != action:
+                    dx, dy = self.env._action_to_direction(new_action)
+                    reward = self.env.move(self, self.x + dx, self.y + dy)
+                    if reward != -1:
+                        break
 
         # If an item is found, remove it
         items_to_remove = []
