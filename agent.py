@@ -4,6 +4,8 @@ from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense, Flatten
 from keras.optimizers import Adam
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from game_objects import Item
 

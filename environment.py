@@ -12,7 +12,7 @@ class Environment(gym.Env):
             raise ValueError("Not enough cells for the required objects")
 
         self.size = size
-        self.grid = np.full((size, size), None, dtype=object) # Change from np.empty to np.full to initialize with None
+        self.grid = np.full((size, size), None, dtype=object) 
         
         self.action_space = spaces.Discrete(4)
         state_shape = ((2*3+1), (2*3+1))
@@ -29,19 +29,25 @@ class Environment(gym.Env):
         if unoccupied_cells.size == 0:
             raise ValueError("The grid is full, cannot place more entities.")
         idx = np.random.choice(unoccupied_cells.shape[0])
-        y, x = unoccupied_cells[idx]  # Change to ensure correct indexing
+        x, y = unoccupied_cells[idx]  
         if entity_type in [Cop, Thief]:
             entity = entity_type(x, y, self, field_of_view, state_shape, action_size)
         else:
             entity = entity_type(x, y)
-        if self.grid[y, x] == None:
-            self.grid[y, x] = entity  # Change to ensure correct indexing
+        self.grid[x, y] = entity  
         return entity
 
     def step(self):
-        actions = [agent.act(agent.get_agent_view()) for agent in (self.cops + self.thieves)]
-        results = [agent.step(action) for action, agent in zip(actions, self.cops + self.thieves)]
-        new_states, rewards, dones, _ = zip(*results)
+        actions_cops = [cop.act(cop.get_agent_view()) for cop in self.cops]
+        actions_thieves = [thief.act(thief.get_agent_view()) for thief in self.thieves]
+        results_cops = [cop.step(action) for action, cop in zip(actions_cops, self.cops)]
+        results_thieves = [thief.step(action) for action, thief in zip(actions_thieves, self.thieves)]
+        new_states_cops, rewards_cops, dones_cops, _ = zip(*results_cops)
+        new_states_thieves, rewards_thieves, dones_thieves, _ = zip(*results_thieves)
+
+        new_states = new_states_cops + new_states_thieves
+        rewards = rewards_cops + rewards_thieves
+        dones = dones_cops + dones_thieves
 
         if self.is_game_over():
             dones = [True]*len(dones)
@@ -49,25 +55,23 @@ class Environment(gym.Env):
         return new_states, rewards, dones, {}
 
     def reset(self):
-        padding_size = max(agent.field_of_view for agent in (self.cops + self.thieves))
-        self.grid = np.full((self.size + 2 * padding_size, self.size + 2 * padding_size), None, dtype=object)
-        self._reset_positions(self.cops, padding_size)
-        self._reset_positions(self.thieves, padding_size)
-        self._reset_positions(self.items, padding_size)
-        self._reset_positions(self.obstacles, padding_size)
+        self.grid = np.full((self.size, self.size), None, dtype=object)
+        self._reset_positions(self.cops)
+        self._reset_positions(self.thieves)
+        self._reset_positions(self.items)
+        self._reset_positions(self.obstacles)
         return [agent.get_agent_view() for agent in (self.cops + self.thieves)]
 
-    def _reset_positions(self, entities, padding_size):
+    def _reset_positions(self, entities):
         for entity in entities:
             unoccupied_cells = np.argwhere(self.grid == None)
             if unoccupied_cells.size == 0:
                 raise ValueError("The grid is full, cannot reset positions.")
             idx = np.random.choice(unoccupied_cells.shape[0])
-            y, x = unoccupied_cells[idx]
-            if self.grid[y, x] == None:
-                self.grid[entity.y, entity.x] = None
-                self.grid[y, x] = entity
-                entity.y, entity.x = y + padding_size, x + padding_size
+            x, y = unoccupied_cells[idx]
+            self.grid[entity.x, entity.y] = None
+            self.grid[x, y] = entity
+            entity.x, entity.y = x, y
 
     def _action_to_direction(self, action):
         if action == 0:
@@ -81,31 +85,33 @@ class Environment(gym.Env):
         else:
             raise ValueError(f"Invalid action {action}")
 
-    def move_agent(self, agent, new_y, new_x):  # Change to ensure correct indexing
+    def move_agent(self, agent, new_x, new_y):  
         # Boundary check
-        if new_y < 0 or new_y >= self.grid.shape[0] or new_x < 0 or new_x >= self.grid.shape[1] or isinstance(self.grid[new_y, new_x], Obstacle):
+        if new_x < 0 or new_x >= self.grid.shape[0] or new_y < 0 or new_y >= self.grid.shape[1] or isinstance(self.grid[new_x, new_y], Obstacle):
             return -1  # Invalid move
 
         # Handle catching a thief by a cop
-        if isinstance(agent, Cop) and isinstance(self.grid[new_y, new_x], Thief):
-            self.grid[new_y, new_x] = agent
-            self.grid[agent.y, agent.x] = None
-            agent.y, agent.x = new_y, new_x
+        if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
+            self.grid[agent.x, agent.y] = None
+            self.grid[new_x, new_y] = agent
+            agent.x, agent.y = new_x, new_y
             return 1
 
         # Handle stealing an item by a thief
-        elif isinstance(agent, Thief) and isinstance(self.grid[new_y, new_x], Item):
-            self.grid[new_y, new_x] = agent
-            self.grid[agent.y, agent.x] = None
-            agent.y, agent.x = new_y, new_x
+        elif isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Item):
+            self.grid[agent.x, agent.y] = None
+            self.grid[new_x, new_y] = agent
+            agent.x, agent.y = new_x, new_y
             return 1
 
         # Moving the agent
-        if self.grid[new_y, new_x] == None:
-            self.grid[agent.y, agent.x] = None
-            self.grid[new_y, new_x] = agent
-            agent.y, agent.x = new_y, new_x
-        return 0
+        if self.grid[new_x, new_y] == None:
+            self.grid[agent.x, agent.y] = None
+            self.grid[new_x, new_y] = agent
+            agent.x, agent.y = new_x, new_y
+            return 0
+
+        return -1  # Invalid move, something already exists on the cell
 
     def is_game_over(self):
         return len(self.thieves) == 0 or len(self.items) == 0
@@ -134,4 +140,5 @@ class Environment(gym.Env):
     def close(self):
         # Perform any necessary cleanup
         pass
+
 
