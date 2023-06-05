@@ -26,8 +26,8 @@ class Agent:
         model.add(Flatten(input_shape=(self.state_space.shape)))
         model.add(Dense(24, activation='relu'))
         model.add(Dense(24, activation='relu'))
-        model.add(Dense(self.action_space.n, activation='softmax'))
-        model.compile(loss='cross_entropy', optimizer=Adam())
+        model.add(Dense(self.action_space.n, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam())
         return model
 
     def get_state(self):
@@ -75,14 +75,18 @@ class Cop(Agent):
         super().__init__(x, y, env, field_of_view)
 
     def step(self, action):
+
+        print(f"Cop at ({self.x}, {self.y}) received action: {action}")
         # Get current state
         state = self.get_state()
 
         # Convert action into a direction
         dx, dy = self.env._action_to_direction(action)
+        print(f"Converted action to direction: dx={dx}, dy={dy}")
 
         # Try to move the agent
         reward = self.env.move(self, self.x + dx, self.y + dy)
+        print(f"Attempted to move cop to ({self.x + dx}, {self.y + dy}). Reward received: {reward}")
 
          # If a thief is caught, remove it
         thieves_to_remove = []
@@ -107,14 +111,19 @@ class Thief(Agent):
         super().__init__(x, y, env, field_of_view)
 
     def step(self, action):
+        print(f"Thief at ({self.x}, {self.y}) received action: {action}")
+
         # Get current state
         state = self.get_state()
 
         # Convert action into a direction
         dx, dy = self.env._action_to_direction(action)
+        print(f"Converted action to direction: dx={dx}, dy={dy}")
 
         # Try to move the agent
         reward = self.env.move(self, self.x + dx, self.y + dy)
+        print(f"Attempted to move thief to ({self.x + dx}, {self.y + dy}). Reward received: {reward}")
+
 
         # If an item is found, remove it
         items_to_remove = []
@@ -122,6 +131,7 @@ class Thief(Agent):
             if item.x == self.x + dx and item.y == self.y + dy:  
                 items_to_remove.append(item)
                 reward = 1  # Define your reward for stealing an item
+                print(f"Found item at ({item.x}, {item.y}). Reward is now: {reward}")
 
         for item in items_to_remove:
             self.env.remove_item(item)

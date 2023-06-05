@@ -55,7 +55,11 @@ class Environment(gym.Env):
 
         for idx, agent in enumerate(self.cops + self.thieves):
             action = actions[idx]
+
+
             new_state, reward, done, _ = agent.step(action)
+
+
             rewards.append(reward)
             new_states.append(new_state)
             dones.append(done)
