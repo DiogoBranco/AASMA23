@@ -63,12 +63,17 @@ class DQNAgent:
         td_error = abs(target - self.model.predict(state)[0][action])
         self.memory.append(td_error, (state, action, target, next_state, done))
 
-    def act(self, state):
+    def act(self, state, valid_actions):
         if np.random.rand() <= self.epsilon:
-            return random.randrange(self.action_size)
+            return random.choice(valid_actions)
         state = np.reshape(state, [1, -1])  # reshaping the state
         act_values = self.model.predict(state)
-        return np.argmax(act_values[0])
+        # Choose the best valid action
+        action = np.argmax(act_values[0])
+        while action not in valid_actions:
+            act_values[0][action] = -np.inf  # Exclude this action
+            action = np.argmax(act_values[0])
+        return action
 
     def replay(self, batch_size):
         minibatch = self.memory.sample(batch_size)
@@ -99,8 +104,21 @@ class Agent:
 
         self.dqn_agent = DQNAgent(state_shape, action_size)
 
+    def get_valid_actions(self):
+        valid_actions = []
+        if self.y > 0:
+            valid_actions.append(0)  # Up
+        if self.y < self.env.grid.shape[0] - 1:
+            valid_actions.append(1)  # Down
+        if self.x > 0:
+            valid_actions.append(2)  # Left
+        if self.x < self.env.grid.shape[1] - 1:
+            valid_actions.append(3)  # Right
+        return valid_actions
+
     def act(self, state):
-        return self.dqn_agent.act(state)
+        valid_actions = self.get_valid_actions()
+        return self.dqn_agent.act(state, valid_actions)
 
     def get_agent_view(self):
         # Extract the agent's field of view from the grid

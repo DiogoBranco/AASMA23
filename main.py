@@ -1,4 +1,6 @@
 from environment import Environment
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 class Simulation:
     def __init__(self, env, batch_size):

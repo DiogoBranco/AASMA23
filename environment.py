@@ -86,6 +86,11 @@ class Environment(gym.Env):
             raise ValueError(f"Invalid action {action}")
 
     def move_agent(self, agent, new_x, new_y):  
+
+        # Check if the new position is adjacent to the agent's current position
+        if abs(new_x - agent.x) > 1 or abs(new_y - agent.y) > 1:
+            return -1  # Invalid move
+
         # Boundary check
         if new_x < 0 or new_x >= self.grid.shape[0] or new_y < 0 or new_y >= self.grid.shape[1] or isinstance(self.grid[new_x, new_y], Obstacle):
             return -1  # Invalid move
