@@ -5,6 +5,7 @@ from keras.models import Sequential
 from keras.layers import Dense, Flatten
 from keras.optimizers import Adam
 from gym import spaces
+from game_objects import Item
 
 class Agent:
     def __init__(self, x, y, env, field_of_view):
@@ -115,6 +116,24 @@ class Cop(Agent):
 
         return next_state, reward, done, {}
 
+    def choose_action(self, state):
+        # Check for immediate objective (thief) in agent's adjacent cells
+        for action in range(self.action_space.n):
+            dx, dy = self.env._action_to_direction(action)
+            new_x, new_y = self.x + dx, self.y + dy
+            if self.env._is_within_grid(new_x, new_y) and isinstance(self.env.grid[new_y][new_x], Thief):
+                print(f"Immediate objective (thief) at ({new_x}, {new_y}), choosing action: {action}")
+                return action
+
+        # If no immediate objective, use model to choose action or explore randomly
+        if np.random.rand() <= self.epsilon:
+            print("Choosing random action due to epsilon")
+            return self.action_space.sample()
+        act_values = self.model.predict(state)
+        chosen_action = np.argmax(act_values[0])
+        print(f"Chosen action: {chosen_action}, Q-values: {act_values[0]}")
+        return chosen_action
+
 class Thief(Agent):
     def __init__(self, x, y, env, field_of_view):
         super().__init__(x, y, env, field_of_view)
@@ -161,3 +180,26 @@ class Thief(Agent):
 
         return next_state, reward, done, {}
 
+    def choose_action(self, state):
+        # Check for immediate objective (item) in agent's field of view
+        for action in range(self.action_space.n):
+            dx, dy = self.env._action_to_direction(action)
+            new_x, new_y = self.x + dx, self.y + dy
+            if self.env._is_within_grid(new_x, new_y) and isinstance(self.env.grid[new_y][new_x], Item):
+                # Check if moving to the item would place the thief adjacent to a cop
+                for dx2, dy2 in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    adj_x, adj_y = new_x + dx2, new_y + dy2
+                    if self.env._is_within_grid(adj_x, adj_y) and isinstance(self.env.grid[adj_y][adj_x], Cop):
+                        break  # Moving to the item would place the thief adjacent to a cop, so don't choose this action
+                else:
+                    print(f"Immediate objective (item) at ({new_x}, {new_y}), choosing action: {action}")
+                    return action
+
+        # If no immediate objective, use model to choose action or explore randomly
+        if np.random.rand() <= self.epsilon:
+            print("Choosing random action due to epsilon")
+            return self.action_space.sample()
+        act_values = self.model.predict(state)
+        chosen_action = np.argmax(act_values[0])
+        print(f"Chosen action: {chosen_action}, Q-values: {act_values[0]}")
+        return chosen_action

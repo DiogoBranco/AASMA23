@@ -44,7 +44,9 @@ class Environment(gym.Env):
         self.grid[x, y] = entity
         return entity
 
-                
+    def _is_within_grid(self, x, y):
+        return 0 <= x < self.size and 0 <= y < self.size
+
     def step(self):
         done = False
         rewards = []
@@ -59,6 +61,9 @@ class Environment(gym.Env):
 
             new_state, reward, done, _ = agent.step(action)
 
+            # If agent is a thief and moved to an item's cell, remove the item
+            if isinstance(agent, Thief) and isinstance(self.grid[agent.x, agent.y], Item):
+                self.grid[agent.x, agent.y] = None
 
             rewards.append(reward)
             new_states.append(new_state)
