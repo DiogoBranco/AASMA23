@@ -61,6 +61,14 @@ class Environment(gym.Env):
 
             new_state, reward, done, _ = agent.step(action)
 
+            # If agent is a cop and moved to a thief's cell, remove the thief
+            if isinstance(agent, Cop):
+                for thief in self.thieves:
+                    if agent.x == thief.x and agent.y == thief.y:
+                        self.thieves.remove(thief)
+                        self.grid[thief.x, thief.y] = None
+                        break
+
             # If agent is a thief and moved to an item's cell, remove the item
             if isinstance(agent, Thief) and isinstance(self.grid[agent.x, agent.y], Item):
                 self.grid[agent.x, agent.y] = None

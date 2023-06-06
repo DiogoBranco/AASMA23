@@ -82,6 +82,16 @@ class Cop(Agent):
         dx, dy = self.env._action_to_direction(action)
         print(f"Converted action to direction: dx={dx}, dy={dy}")
 
+        # If a thief is caught, remove it
+        thieves_to_remove = []
+        for thief in self.env.thieves[:]:  # Assuming the environment keeps a list of thieves
+            if thief.x == self.x + dx and thief.y == self.y + dy:  
+                thieves_to_remove.append(thief)
+                reward = 1  # Define your reward for catching a thief
+
+        for thief in thieves_to_remove:
+            self.env.remove_thief(thief)
+
         # Try to move the agent
         reward = self.env.move(self, self.x + dx, self.y + dy)
         print(f"Attempted to move cop to ({self.x + dx}, {self.y + dy}). Reward received: {reward}")
@@ -94,16 +104,6 @@ class Cop(Agent):
                     reward = self.env.move(self, self.x + dx, self.y + dy)
                     if reward != -1:
                         break
-
-         # If a thief is caught, remove it
-        thieves_to_remove = []
-        for thief in self.env.thieves[:]:  # Assuming the environment keeps a list of thieves
-            if thief.x == self.x + dx and thief.y == self.y + dy:  
-                thieves_to_remove.append(thief)
-                reward = 1  # Define your reward for catching a thief
-
-        for thief in thieves_to_remove:
-            self.env.remove_thief(thief)
 
         # Get the next state
         next_state = self.get_state()
