@@ -82,19 +82,9 @@ class Cop(Agent):
         dx, dy = self.env._action_to_direction(action)
         print(f"Converted action to direction: dx={dx}, dy={dy}")
 
-        # If a thief is caught, remove it
-        thieves_to_remove = []
-        for thief in self.env.thieves[:]:  # Assuming the environment keeps a list of thieves
-            if thief.x == self.x + dx and thief.y == self.y + dy:  
-                thieves_to_remove.append(thief)
-                reward = 1  # Define your reward for catching a thief
-
-        for thief in thieves_to_remove:
-            self.env.remove_thief(thief)
-
         # Try to move the agent
         reward = self.env.move(self, self.x + dx, self.y + dy)
-        print(f"Attempted to move cop to ({self.x + dx}, {self.y + dy}). Reward received: {reward}")
+        print(f"Attempted to move cop to ({self.x}, {self.y}). Reward received: {reward}")
 
         # If the move was unsuccessful, try other actions
         if reward == -1:
@@ -105,6 +95,16 @@ class Cop(Agent):
                     if reward != -1:
                         break
 
+        # If a thief is caught, remove it
+        thieves_to_remove = []
+        for thief in self.env.thieves[:]:  # Assuming the environment keeps a list of thieves
+            if thief.x == self.x and thief.y == self.y:  
+                thieves_to_remove.append(thief)
+                reward = 1  # Define your reward for catching a thief
+
+        for thief in thieves_to_remove:
+            self.env.remove_thief(thief)
+
         # Get the next state
         next_state = self.get_state()
 
@@ -114,6 +114,7 @@ class Cop(Agent):
         return next_state, reward, done, {}
 
     def choose_action(self, state):
+
         # Check for immediate objective (thief) in agent's adjacent cells
         for action in range(self.action_space.n):
             dx, dy = self.env._action_to_direction(action)
@@ -147,7 +148,7 @@ class Thief(Agent):
 
         # Try to move the agent
         reward = self.env.move(self, self.x + dx, self.y + dy)
-        print(f"Attempted to move thief to ({self.x + dx}, {self.y + dy}). Reward received: {reward}")
+        print(f"Attempted to move thief to ({self.x}, {self.y}). Reward received: {reward}")
 
         # If the move was unsuccessful, try other actions
         if reward == -1:
@@ -161,7 +162,7 @@ class Thief(Agent):
         # If an item is found, remove it
         items_to_remove = []
         for item in self.env.items[:]:  # Assuming the environment keeps a list of items
-            if item.x == self.x + dx and item.y == self.y + dy:  
+            if item.x == self.x and item.y == self.y:  
                 items_to_remove.append(item)
                 reward = 1  # Define your reward for stealing an item
                 print(f"Found item at ({item.x}, {item.y}). Reward is now: {reward}")
@@ -183,14 +184,8 @@ class Thief(Agent):
             dx, dy = self.env._action_to_direction(action)
             new_x, new_y = self.x + dx, self.y + dy
             if self.env._is_within_grid(new_x, new_y) and isinstance(self.env.grid[new_y][new_x], Item):
-                # Check if moving to the item would place the thief adjacent to a cop
-                for dx2, dy2 in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    adj_x, adj_y = new_x + dx2, new_y + dy2
-                    if self.env._is_within_grid(adj_x, adj_y) and isinstance(self.env.grid[adj_y][adj_x], Cop):
-                        break  # Moving to the item would place the thief adjacent to a cop, so don't choose this action
-                    else:
-                        print(f"Immediate objective (item) at ({new_x}, {new_y}), choosing action: {action}")
-                        return action
+                print(f"Immediate objective (item) at ({new_x}, {new_y}), choosing action: {action}")
+                return action
 
         # If no immediate objective, use model to choose action or explore randomly
         if np.random.rand() <= self.epsilon:

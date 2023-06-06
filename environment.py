@@ -37,6 +37,8 @@ class Environment(gym.Env):
             raise ValueError("The grid is full, cannot place more entities.")
         idx = np.random.choice(unoccupied_cells.shape[0])
         x, y = unoccupied_cells[idx]
+        if self.grid[x, y] is not None:
+            return None  # Cell is already occupied, so return None
         if entity_type in [Cop, Thief]:
             entity = entity_type(x, y, self, field_of_view)
         else:
@@ -53,9 +55,9 @@ class Environment(gym.Env):
         new_states = []
         dones = []
         
-        actions = [agent.choose_action(agent.get_state()) for agent in (self.cops + self.thieves)]
+        actions = [agent.choose_action(agent.get_state()) for agent in (self.thieves + self.cops)]
 
-        for idx, agent in enumerate(self.cops + self.thieves):
+        for idx, agent in enumerate(self.thieves + self.cops):
             action = actions[idx]
 
 
@@ -157,6 +159,9 @@ class Environment(gym.Env):
         if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Cop):
             return -1  # Penalty for trying to move into a cell occupied by another cop
 
+        if isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Thief):
+            return -1  # Penalty for trying to move into a cell occupied by another thief
+
         if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
             return 1  # Reward for catching a thief
 
@@ -176,16 +181,26 @@ class Environment(gym.Env):
     def move_agent(self, agent, new_x, new_y):
         if isinstance(self.grid[new_x, new_y], Obstacle):
             return -1
+
+        if isinstance(agent, Cop) and isinstance(self.grid[new_y][new_x], Item):
+            return -1  # Prevent the cop from moving onto an item
+            
         # Handle catching a thief by a cop
         if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
             thief_to_remove = self.grid[new_x, new_y]
             self.remove_thief(thief_to_remove)  # Call remove_thief method
+            self.grid[agent.x, agent.y] = None
+            self.grid[new_x, new_y] = agent
+            agent.x, agent.y = new_x, new_y
             return 1
 
         # Handle stealing an item by a thief
         elif isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Item):
             item_to_remove = self.grid[new_x, new_y]
             self.remove_item(item_to_remove)  # Call remove_item method
+            self.grid[agent.x, agent.y] = None
+            self.grid[new_x, new_y] = agent
+            agent.x, agent.y = new_x, new_y
             return 1
 
         # Moving the agent
@@ -195,6 +210,7 @@ class Environment(gym.Env):
         return 0
 
     def move(self, agent, new_x, new_y):
+
         reward = self.calculate_reward(agent, new_x, new_y)
         if reward >= 0:  # The agent can move
             self.move_agent(agent, new_x, new_y)

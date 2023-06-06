@@ -9,7 +9,6 @@ def main():
     batch_size = 32   # mini-batch size for replay
 
     for episode in range(num_episodes):
-        env.reset()  # if you have implemented a reset method in your environment
 
         env.render()
         while not env.is_game_over():
