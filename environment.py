@@ -1,265 +1,127 @@
-from agent import Cop, Thief
-from game_objects import Item, Obstacle
-from utils import nearest_item, nearest_thief
+import random
 import numpy as np
-import gym
-from gym import spaces
+from thief import Thief
+from cop import Cop
+from item import Item
+from obstacle import Obstacle
 
+class Environment:
+    def __init__(self, size, num_thieves, thieves_fov, thieves_speed, num_cops, cops_fov, cops_speed, num_items, num_obstacles, model):
 
-
-class Environment(gym.Env):
-    def __init__(self, size, num_cops, num_thieves, num_items, num_obstacles):
-        super(Environment, self).__init__()
-
-        if size*size < num_cops + num_thieves + num_items + num_obstacles:
-            raise ValueError("Not enough cells for the required objects")
+        if size * size < num_thieves + num_cops + num_items + num_obstacles:
+            raise ValueError("Too many entities for the grid size")
 
         self.size = size
-        self.grid = np.empty((size, size), dtype=object)
-        
-        self.cops = [self._place_on_grid(Cop, 3) for _ in range(num_cops)] # 3 as an example field of view
-        self.thieves = [self._place_on_grid(Thief, 3) for _ in range(num_thieves)] # 3 as an example field of view
-        self.items = [self._place_on_grid(Item) for _ in range(num_items)]
-        self.obstacles = [self._place_on_grid(Obstacle) for _ in range(num_obstacles)]
+        self.grid = np.full((size, size), None)
 
-        # Define action and observation space
-        # They must be gym.spaces objects
-        # Example when using discrete actions, Box for continuous
-        self.action_space = spaces.Discrete(4)
+        self.thieves = []
+        self.cops = []
+        self.items = []
+        self.obstacles = []
 
-        # Observation is the grid itself 
-        self.observation_space = spaces.Box(low=0, high=1,
-                                            shape=(self.size, self.size, 1), dtype=np.int)
+        for id in range(num_thieves):
+            x, y = self.place_randomly()
+            thief = Thief(id, x, y, thieves_fov, thieves_speed, model, self)
+            self.grid[x][y] = thief
+            self.thieves.append(thief)
 
-    def _place_on_grid(self, entity_type, field_of_view=3):
-        unoccupied_cells = np.argwhere(self.grid == None)
-        if unoccupied_cells.size == 0:
-            raise ValueError("The grid is full, cannot place more entities.")
-        idx = np.random.choice(unoccupied_cells.shape[0])
-        x, y = unoccupied_cells[idx]
-        if self.grid[x, y] is not None:
-            return None  # Cell is already occupied, so return None
-        if entity_type in [Cop, Thief]:
-            entity = entity_type(x, y, self, field_of_view)
-        else:
-            entity = entity_type(x, y)
-        self.grid[x, y] = entity
-        return entity
+        for id in range(num_cops):
+            x, y = self.place_randomly()
+            cop = Cop(id, x, y, cops_fov, cops_speed, model, self)
+            self.grid[x][y] = cop
+            self.cops.append(cop)
 
-    def _is_within_grid(self, x, y):
-        return 0 <= x < self.size and 0 <= y < self.size
+        for id in range(num_items):
+            x, y = self.place_randomly()
+            item = Item(id, x, y)
+            self.grid[x][y] = item
+            self.items.append(item)
 
-    def step(self):
-        done = False
-        rewards = []
-        new_states = []
-        dones = []
-        
-        actions = [agent.choose_action(agent.get_state()) for agent in (self.thieves + self.cops)]
+        for id in range(num_obstacles):
+            x, y = self.place_randomly()
+            obstacle = Obstacle(id, x, y)
+            self.grid[x][y] = obstacle
+            self.obstacles.append(obstacle)
 
-        for idx, agent in enumerate(self.thieves + self.cops):
-            action = actions[idx]
-
-
-            new_state, reward, done, _ = agent.step(action)
-
-            # If agent is a cop and moved to a thief's cell, remove the thief
-            if isinstance(agent, Cop):
-                for thief in self.thieves:
-                    if agent.x == thief.x and agent.y == thief.y:
-                        self.thieves.remove(thief)
-                        self.grid[thief.x, thief.y] = None
-                        break
-
-            # If agent is a thief and moved to an item's cell, remove the item
-            if isinstance(agent, Thief) and isinstance(self.grid[agent.x, agent.y], Item):
-                self.grid[agent.x, agent.y] = None
-
-            rewards.append(reward)
-            new_states.append(new_state)
-            dones.append(done)
-
-        if self.is_game_over():
-            done = True
-
-        return new_states, rewards, dones, {}
-
-    def get_observation(self):
-        # Convert the current grid into an observation suitable for the observation space
-        # This is a placeholder implementation, you may need to modify it to suit your needs
-        observation = np.zeros((self.size, self.size, 1), dtype=np.int)
-        for i in range(self.size):
-            for j in range(self.size):
-                cell = self.grid[i, j]
-                if isinstance(cell, Cop):
-                    observation[i, j, 0] = 1
-                elif isinstance(cell, Thief):
-                    observation[i, j, 0] = 2
-                elif isinstance(cell, Item):
-                    observation[i, j, 0] = 3
-                elif isinstance(cell, Obstacle):
-                    observation[i, j, 0] = 4
-        return observation
-
-    def _get_state(self, agent):
-        # Initialize the state as a 2D array filled with zeros.
-        state = np.zeros((agent.field_of_view * 2 + 1, agent.field_of_view * 2 + 1), dtype=int)
-    
-        # Calculate the bounds of the field of view.
-        start_x = max(0, agent.x - agent.field_of_view)
-        start_y = max(0, agent.y - agent.field_of_view)
-        end_x = min(self.size, agent.x + agent.field_of_view + 1)
-        end_y = min(self.size, agent.y + agent.field_of_view + 1)
-    
-        # Populate the state array with the contents of the grid within the field of view.
-        for i in range(start_x, end_x):
-            for j in range(start_y, end_y):
-                cell = self.grid[i, j]
-                if isinstance(cell, Cop):
-                    state[i - start_x, j - start_y] = 1
-                elif isinstance(cell, Thief):
-                    state[i - start_x, j - start_y] = 2
-                elif isinstance(cell, Item):
-                    state[i - start_x, j - start_y] = 3
-                elif isinstance(cell, Obstacle):
-                    state[i - start_x, j - start_y] = 4
-        return state
-
-    
-
-    def reset(self):
-        self.grid = np.empty((self.size, self.size), dtype=object)
-        self._reset_positions(self.cops)
-        self._reset_positions(self.thieves)
-        self._reset_positions(self.items)
-        self._reset_positions(self.obstacles)
-        return [agent.get_state() for agent in (self.cops + self.thieves)]
-
-    def _reset_positions(self, entities):
-        for entity in entities:
-            unoccupied_cells = np.argwhere(self.grid == None)
-            idx = np.random.choice(unoccupied_cells.shape[0])
-            x, y = unoccupied_cells[idx]
-            self.grid[entity.x, entity.y] = None  # Clear old position
-            self.grid[x, y] = entity
-            entity.x = x
-            entity.y = y
-
-    def _action_to_direction(self, action):
-        # Convert action index to movement
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # up, down, left, right
-        return directions[action]
-
-
-    def calculate_reward(self, agent, new_x, new_y):
-        if new_x >= self.size or new_y >= self.size or new_x < 0 or new_y < 0 or isinstance(self.grid[new_x, new_y], Obstacle):
-            return -1  # Penalty for trying to move out of the grid or into an obstacle
-
-        # Prevent a cop from moving to a cell that is already occupied by another cop
-        if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Cop):
-            return -1  # Penalty for trying to move into a cell occupied by another cop
-
-        if isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Thief):
-            return -1  # Penalty for trying to move into a cell occupied by another thief
-
-        if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
-            return 1  # Reward for catching a thief
-
-        elif isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Item):
-            return 1  # Reward for stealing an item
-
-        return 0  # No reward or penalty for moving to an empty cell
-
-    def remove_thief(self, thief):
-        self.grid[thief.x, thief.y] = None
-        self.thieves.remove(thief)
-
-    def remove_item(self, item):
-        self.grid[item.x, item.y] = None
-        self.items.remove(item)
-
-    def move_agent(self, agent, new_x, new_y):
-        if isinstance(self.grid[new_x, new_y], Obstacle):
-            return -1
-
-        if isinstance(agent, Cop) and isinstance(self.grid[new_y][new_x], Item):
-            return -1  # Prevent the cop from moving onto an item
+    def place_randomly(self):
+        while True:
+            x, y = random.randint(0, self.size - 1), random.randint(0, self.size - 1)
+            if self.grid[x][y] is None:
+                return x, y
             
-        # Handle catching a thief by a cop
-        if isinstance(agent, Cop) and isinstance(self.grid[new_x, new_y], Thief):
-            thief_to_remove = self.grid[new_x, new_y]
-            self.remove_thief(thief_to_remove)  # Call remove_thief method
-            self.grid[agent.x, agent.y] = None
-            self.grid[new_x, new_y] = agent
-            agent.x, agent.y = new_x, new_y
-            return 1
-
-        # Handle stealing an item by a thief
-        elif isinstance(agent, Thief) and isinstance(self.grid[new_x, new_y], Item):
-            item_to_remove = self.grid[new_x, new_y]
-            self.remove_item(item_to_remove)  # Call remove_item method
-            self.grid[agent.x, agent.y] = None
-            self.grid[new_x, new_y] = agent
-            agent.x, agent.y = new_x, new_y
-            return 1
-
-        # Moving the agent
-        self.grid[agent.x, agent.y] = None
-        self.grid[new_x, new_y] = agent
+    def move_to_delta(self, direction):
+        if direction == "stay":
+            return 0, 0
+        if direction == "up":
+            return -1, 0
+        if direction == "down":
+            return 1, 0
+        if direction == "left":
+            return 0, -1
+        if direction == "right":
+            return 0, 1
+            
+    def is_valid_move(self, agent, direction):
+        dx, dy = self.move_to_delta(direction)
+        new_x, new_y = agent.x + dx, agent.y + dy
+        if not (0 <= new_x < self.size and 0 <= new_y < self.size):
+            return False
+        at_entity = self.grid[new_x][new_y]
+        return (agent == at_entity or at_entity is None or (isinstance(agent, Thief) and isinstance(at_entity, Item)) or (isinstance(agent, Cop) and isinstance(at_entity, Thief)))
+    
+    def perform_move(self, agent, direction):
+        dx, dy = self.move_to_delta(direction)
+        new_x, new_y = agent.x + dx, agent.y + dy
+        print(f"{type(agent).__name__}-{agent.id} moved {direction} from {agent.x, agent.y} to {new_x, new_y}")
+        at_entity = self.grid[new_x][new_y]
+        if isinstance(agent, Thief) and isinstance(at_entity, Item):
+            print(f"{type(agent).__name__}-{agent.id} caught {type(at_entity).__name__}-{at_entity.id}")
+            self.items.remove(at_entity)
+        if isinstance(agent, Cop) and isinstance(at_entity, Thief):
+            print(f"{type(agent).__name__}-{agent.id} caught {type(at_entity).__name__}-{at_entity.id}")
+            self.thieves.remove(at_entity)
+        self.grid[agent.x][agent.y] = None
         agent.x, agent.y = new_x, new_y
-        return 0
+        self.grid[new_x][new_y] = agent
 
-    def move(self, agent, new_x, new_y):
+    def step(self, input_flag):
+        if input_flag:
+            input("Press Enter to proceed to next step...")
 
-        reward = self.calculate_reward(agent, new_x, new_y)
-        if reward >= 0:  # The agent can move
-            self.move_agent(agent, new_x, new_y)
-        return reward
+        for thief in random.sample(self.thieves, len(self.thieves)):
+            for _ in range(thief.speed):
+                excludes = []
+                while True:
+                    direction, excludes = thief.next_move(excludes)
+                    if self.is_valid_move(thief, direction):
+                        self.perform_move(thief, direction)
+                        break
+                    excludes.append(direction)
 
-    def _get_observation(self):
-        # Convert the current grid into an observation suitable for the observation space
-        # This is a placeholder implementation, you may need to modify it to suit your needs
-        observation = np.zeros((self.size, self.size, 1), dtype=np.int)
+        for cop in random.sample(self.cops, len(self.cops)):
+            for _ in range(cop.speed):
+                excludes = []
+                while True:
+                    direction, excludes = cop.next_move(excludes)
+                    if self.is_valid_move(cop, direction):
+                        self.perform_move(cop, direction)
+                        break
+                    excludes.append(direction)
+            
+    def is_game_over(self):
+        if len(self.thieves) == 0:
+            print("Cops won the game!")
+            return True
+        if len(self.items) == 0:
+            print("Thieves won the game!")
+            return True
+        return False
+
+    def render(self):
+        print("-" * (self.size * 4 + 1))
         for i in range(self.size):
             for j in range(self.size):
                 cell = self.grid[i, j]
-                if isinstance(cell, Cop):
-                    observation[i, j, 0] = 1
-                elif isinstance(cell, Thief):
-                    observation[i, j, 0] = 2
-                elif isinstance(cell, Item):
-                    observation[i, j, 0] = 3
-                elif isinstance(cell, Obstacle):
-                    observation[i, j, 0] = 4
-        return observation
-
-
-    def is_game_over(self):
-        return len(self.thieves) == 0 or len(self.items) == 0
-    
-    def render(self, mode='human'):
-        # Render the environment to the screen
-        if mode == 'human':
-            for i in range(self.size):
-                for j in range(self.size):
-                    cell = self.grid[i, j]
-                    if isinstance(cell, Cop):
-                        print('| C ', end='')
-                    elif isinstance(cell, Thief):
-                        print('| T ', end='')
-                    elif isinstance(cell, Item):
-                        print('| I ', end='')
-                    elif isinstance(cell, Obstacle):
-                        print('| O ', end='')
-                    else:
-                        print('|   ', end='')
-                print('|')
-                print('-' * self.size * 4)
-        else:
-            super(Environment, self).render(mode=mode)  # Just in case super has render for 'rgb_array' or 'ansi' modes
-
-    def close(self):
-        # Perform any necessary cleanup
-        pass
-
-    
+                print(f"| {cell if cell is not None else ' '} ", end="")
+            print("|")
+            print("-" * (self.size * 4 + 1))
