@@ -14,7 +14,7 @@ def nearest_item(env, agent):
     min_distance = float('inf')
     nearest_item = None
     for item in env.items:
-        distance = abs(agent.x - item.x) + abs(agent.y - item.y)
+        distance = abs(agent.y - item.y) + abs(agent.x - item.x)
         if distance <= agent.field_of_view and distance < min_distance:
             min_distance = distance
             nearest_item = item
@@ -24,7 +24,7 @@ def nearest_thief(env, agent):
     min_distance = float('inf')
     nearest_thief = None
     for thief in env.thieves:
-        distance = abs(agent.x - thief.x) + abs(agent.y - thief.y)
+        distance = abs(agent.y - thief.y) + abs(agent.x - thief.x)
         if distance <= agent.field_of_view and distance < min_distance:
             min_distance = distance
             nearest_thief = thief

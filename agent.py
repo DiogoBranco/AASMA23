@@ -119,7 +119,7 @@ class Cop(Agent):
         for action in range(self.action_space.n):
             dx, dy = self.env._action_to_direction(action)
             new_x, new_y = self.x + dx, self.y + dy
-            if self.env._is_within_grid(new_x, new_y) and isinstance(self.env.grid[new_y][new_x], Thief):
+            if self.env._is_within_grid(new_x, new_y) and isinstance(self.env.grid[new_x][new_y], Thief):
                 print(f"Immediate objective (thief) at ({new_x}, {new_y}), choosing action: {action}")
                 return action
 
@@ -183,7 +183,7 @@ class Thief(Agent):
         for action in range(self.action_space.n):
             dx, dy = self.env._action_to_direction(action)
             new_x, new_y = self.x + dx, self.y + dy
-            if self.env._is_within_grid(new_x, new_y) and isinstance(self.env.grid[new_y][new_x], Item):
+            if self.env._is_within_grid(new_x, new_y) and isinstance(self.env.grid[new_x][new_y], Item):
                 print(f"Immediate objective (item) at ({new_x}, {new_y}), choosing action: {action}")
                 return action
 
