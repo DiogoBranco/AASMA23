@@ -39,10 +39,7 @@ class Agent:
 
 
     def choose_action(self, state):
-        if np.random.rand() <= self.epsilon:
-            return self.action_space.sample()
-        act_values = self.model.predict(state)
-        return np.argmax(act_values[0])  
+        raise NotImplementedError("This method should be overridden by child classes") 
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((np.copy(state), action, reward, np.copy(next_state), done))
@@ -191,9 +188,9 @@ class Thief(Agent):
                     adj_x, adj_y = new_x + dx2, new_y + dy2
                     if self.env._is_within_grid(adj_x, adj_y) and isinstance(self.env.grid[adj_y][adj_x], Cop):
                         break  # Moving to the item would place the thief adjacent to a cop, so don't choose this action
-                else:
-                    print(f"Immediate objective (item) at ({new_x}, {new_y}), choosing action: {action}")
-                    return action
+                    else:
+                        print(f"Immediate objective (item) at ({new_x}, {new_y}), choosing action: {action}")
+                        return action
 
         # If no immediate objective, use model to choose action or explore randomly
         if np.random.rand() <= self.epsilon:
