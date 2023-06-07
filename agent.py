@@ -3,8 +3,8 @@ from entity import Entity
 
 class Agent(Entity):
     
-    def __init__(self, id, x, y, fov, speed, model, env):
-        super().__init__(id, x, y)
+    def __init__(self, id, fov, speed, model, env):
+        super().__init__(id)
         self.fov = fov
         self.speed = speed
         
