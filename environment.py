@@ -24,6 +24,24 @@ class Environment:
     def within_grid(self, x, y):
         return 0 <= x < self.size and 0 <= y < self.size
 
+    def get_state(self):
+        state = np.zeros((self.size, self.size))  # Create an array with the same shape as the grid
+        for i in range(self.size):  # Iterate over the rows of the grid
+            for j in range(self.size):  # Iterate over the columns of the grid
+                entity = self.grid[i][j]
+                if entity is None:
+                    state[i][j] = 0  # Empty space
+                elif isinstance(entity, Obstacle):
+                    state[i][j] = 1  # Obstacle
+                elif isinstance(entity, Cop):
+                    state[i][j] = 2  # Cop
+                elif isinstance(entity, Thief):
+                    state[i][j] = 3  # Thief
+                elif isinstance(entity, Item):
+                    state[i][j] = 4  # Item
+        return state
+
+
     def surrounded(self, x, y, entity_types):
         if not entity_types:
             return False
@@ -78,6 +96,18 @@ class Environment:
             return 0, -1
         if direction == "right":
             return 0, 1
+
+    def move_to_int(self, direction):
+        if direction == "stay":
+            return 0
+        if direction == "up":
+            return 1
+        if direction == "down":
+            return 2
+        if direction == "left":
+            return 3
+        if direction == "right":
+            return 4
             
     def is_valid_move(self, agent, direction):
         dx, dy = self.move_to_delta(direction)
@@ -108,11 +138,81 @@ class Environment:
             for _ in range(agent.speed):
                 excludes = []
                 while True:
+                    state = self.get_state()
                     direction, excludes = agent.next_move(excludes)
                     if self.is_valid_move(agent, direction):
+                        reward = self.calculate_reward(agent, direction)
                         self.perform_move(agent, direction)
+                        next_state = self.get_state()  # Get state of the environment after action
+                        agent.remember(state, self.move_to_int(direction), reward, next_state, self.game_over()) # assuming these are defined appropriately
                         break
                     excludes.append(direction)
+
+    def calculate_reward(self, agent, direction):
+        dx, dy = self.move_to_delta(direction)
+        new_x, new_y = agent.x + dx, agent.y + dy
+        at_entity = self.grid[new_x][new_y]
+    
+        # Define some default reward values
+        default_reward = -5
+        thief_reward = 100
+        item_reward = 100
+        closer_to_cop_penalty = 0
+        closer_to_cop_in_fov_penalty = -40
+        away_from_cop_reward = 0
+        away_from_cop_in_fov_reward = 40
+        closer_to_thief_reward = 0
+        closer_to_thief_in_fov_reward = 40
+        away_from_thief_penalty = 0
+        away_from_thief_in_fov_penalty = -40
+
+        reward = 0
+        
+        # If the agent is a Cop and catches a Thief, return a positive reward
+        if isinstance(agent, Cop) and isinstance(at_entity, Thief):
+            reward += thief_reward
+
+        # If the agent is a Thief and finds an Item, return a positive reward
+        if isinstance(agent, Thief) and isinstance(at_entity, Item):
+            reward += item_reward
+
+        # If the agent is a Thief, adjust reward based on distance to Cops
+        if isinstance(agent, Thief):
+            for cop in self.cops:
+                old_distance = agent.manhattan_distance(agent.x, agent.y, cop.x, cop.y)
+                new_distance = agent.manhattan_distance(new_x, new_y, cop.x, cop.y)
+                if new_distance < old_distance: # The thief is getting closer to the cop
+                    if cop in agent.entities_in_fov(Cop): # If the cop is in the thief's FOV
+                        reward += closer_to_cop_in_fov_penalty
+                    else:
+                        reward += closer_to_cop_penalty
+                elif new_distance > old_distance: # The thief is getting further from the cop
+                    if cop in agent.entities_in_fov(Cop): # If the cop is in the thief's FOV
+                        reward += away_from_cop_in_fov_reward
+                    else:
+                        reward += away_from_cop_reward
+
+        # If the agent is a Cop, adjust reward based on distance to Thieves
+        if isinstance(agent, Cop):
+            for thief in self.thieves:
+                old_distance = agent.manhattan_distance(agent.x, agent.y, thief.x, thief.y)
+                new_distance = agent.manhattan_distance(new_x, new_y, thief.x, thief.y)
+                if new_distance < old_distance: # The Cop is getting closer to the Thieves
+                    if thief in agent.entities_in_fov(Thief): # If the cop is in the thief's FOV
+                        reward += closer_to_thief_in_fov_reward
+                    else:
+                        reward += closer_to_thief_reward
+                elif new_distance > old_distance: # The Cop is getting further from the thief
+                    if thief in agent.entities_in_fov(Thief): # If the thief is in the cop's FOV
+                        reward += away_from_thief_in_fov_penalty
+                    else:
+                        reward += away_from_thief_penalty
+
+        # Add default reward if no other conditions met
+        if reward == 0:
+            reward = default_reward
+
+        return reward
 
     def game_over(self):
         return len(self.active_thieves) == 0 or len(self.active_items) == 0

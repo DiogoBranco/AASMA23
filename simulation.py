@@ -67,6 +67,13 @@ class Simulation:
             steps += 1
             if self.game_steps and steps > 10 * stats.mean(self.game_steps):
                 return -1
+
+        for agent in self.env.thieves + self.env.cops:
+            if len(agent.memory) >= 32:
+                agent.replay(32)
+            else:
+                agent.replay(len(agent.memory))  # Replace with your actual replay method
+
         return steps
 
     def perform_simulation(self, input_flag, render_flag, num_games):

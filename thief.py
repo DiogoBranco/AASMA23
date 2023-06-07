@@ -10,3 +10,6 @@ class Thief(Agent):
     
     def greedy_move(self, excludes):
         return super().greedy_move_aux(excludes, Item)
+
+    def learning_move(self, excludes):
+        return super().learning_move_aux(excludes)
