@@ -65,7 +65,7 @@ class Simulation:
             if render_flag:
                 self.env.render()
             steps += 1
-            if self.game_steps and steps > 5 * stats.mean(self.game_steps):
+            if self.game_steps and steps > 10 * stats.mean(self.game_steps):
                 return -1
         return steps
 
