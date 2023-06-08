@@ -24,21 +24,30 @@ class Environment:
     def within_grid(self, x, y):
         return 0 <= x < self.size and 0 <= y < self.size
 
-    def get_state(self):
-        state = np.zeros((self.size, self.size))  # Create an array with the same shape as the grid
-        for i in range(self.size):  # Iterate over the rows of the grid
-            for j in range(self.size):  # Iterate over the columns of the grid
-                entity = self.grid[i][j]
-                if entity is None:
-                    state[i][j] = 0  # Empty space
-                elif isinstance(entity, Obstacle):
-                    state[i][j] = 1  # Obstacle
-                elif isinstance(entity, Cop):
-                    state[i][j] = 2  # Cop
-                elif isinstance(entity, Thief):
-                    state[i][j] = 3  # Thief
-                elif isinstance(entity, Item):
-                    state[i][j] = 4  # Item
+    def get_state(self, agent):
+        # Initialize the state as a 2D list of lists
+        state = np.zeros((agent.fov*2+1, agent.fov*2+1))  # Create an array with the same shape as the FOV grid
+        for dx in range(-agent.fov, agent.fov + 1):
+            for dy in range(-agent.fov, agent.fov + 1):
+                new_x, new_y = agent.x + dx, agent.y + dy
+                # Check if the cell is within the environment boundaries
+                if 0 <= new_x < self.size and 0 <= new_y < self.size:
+                    # Get the entity at the cell
+                    entity = self.grid[new_x][new_y]
+                    # Write entity representations to the state grid
+                    if entity is None:
+                        state[dx+agent.fov, dy+agent.fov] = 0  # Empty space
+                    elif isinstance(entity, Obstacle):
+                        state[dx+agent.fov, dy+agent.fov] = 1  # Obstacle
+                    elif isinstance(entity, Cop):
+                        state[dx+agent.fov, dy+agent.fov] = 2  # Cop
+                    elif isinstance(entity, Thief):
+                        state[dx+agent.fov, dy+agent.fov] = 3  # Thief
+                    elif isinstance(entity, Item):
+                        state[dx+agent.fov, dy+agent.fov] = 4  # Item
+                else:
+                    # Write some default representation for cells outside the environment
+                    state[dx+agent.fov, dy+agent.fov] = -1  # Or whatever you choose
         return state
 
 
@@ -138,12 +147,12 @@ class Environment:
             for _ in range(agent.speed):
                 excludes = []
                 while True:
-                    state = self.get_state()
+                    state = self.get_state(agent)
                     direction, excludes = agent.next_move(excludes)
                     if self.is_valid_move(agent, direction):
                         reward = self.calculate_reward(agent, direction)
                         self.perform_move(agent, direction)
-                        next_state = self.get_state()  # Get state of the environment after action
+                        next_state = self.get_state(agent)  # Get state of the agent after action
                         agent.remember(state, self.move_to_int(direction), reward, next_state, self.game_over()) # assuming these are defined appropriately
                         break
                     excludes.append(direction)

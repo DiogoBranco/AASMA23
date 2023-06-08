@@ -21,7 +21,7 @@ class Agent(Entity):
             self.move = self.learning_move
 
         # Learning Parameters
-        self.state_size = env.size * env.size #len of the vector that contains the grid 
+        self.state_size = (2*fov + 1) * (2*fov + 1) #len of the vector that contains the grid 
         self.action_size = 5 # number of possible moves (left, up, down, right, stay)
 
         self.memory = deque(maxlen=200000)
@@ -49,6 +49,8 @@ class Agent(Entity):
     def update_target_model(self):
         # copy weights from model to target_model
         self.target_model.set_weights(self.model.get_weights())
+
+
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
@@ -122,7 +124,7 @@ class Agent(Entity):
 
     def learning_move_aux(self, excludes):
         # Get the current state of the environment grid
-        state = self.env.get_state()
+        state = self.env.get_state(self)
         state = np.array(state).reshape(1, -1)
         # Use the act method to choose an action
         action_idx = self.act(state)
