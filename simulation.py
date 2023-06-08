@@ -72,10 +72,16 @@ class Simulation:
                 return -1
 
         for agent in self.env.thieves + self.env.cops:
-            if len(agent.memory) >= 32:
-                agent.replay(32)
+            if coop_flag:
+                if len(agent.memory) >= 32:
+                    agent.replay_coop(32)
+                else:
+                    agent.replay_coop(len(agent.memory))  # Replace with your actual replay method
             else:
-                agent.replay(len(agent.memory))  # Replace with your actual replay method
+                if len(agent.memory) >= 32:
+                    agent.replay(32)
+                else:
+                    agent.replay(len(agent.memory)) 
 
         return steps
 

@@ -117,7 +117,7 @@ class Agent(Entity):
 
     def learning_move_aux(self, excludes):
         # Get the current state of the environment grid
-        state = self.env.get_state(self)
+        state = self.env._get_individual_state(self)
         state = np.array(state).reshape(1, -1)
         # Use the act method to choose an action
         action_idx = self.act(state)
