@@ -22,6 +22,7 @@ class Agent(Entity):
 
         # Learning Parameters
         self.state_size = (2*fov + 1) * (2*fov + 1) #len of the vector that contains the grid 
+
         self.action_size = 5 # number of possible moves (left, up, down, right, stay)
 
         self.memory = deque(maxlen=200000)
@@ -50,8 +51,6 @@ class Agent(Entity):
         # copy weights from model to target_model
         self.target_model.set_weights(self.model.get_weights())
 
-
-
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
@@ -77,12 +76,6 @@ class Agent(Entity):
             self.model.fit(state, target, epochs=1, verbose=0)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
-
-    def load(self, name):
-        self.model.load_weights(name)
-
-    def save(self, name):
-        self.model.save_weights(name)
 
     def next_move(self, excludes):
         return self.move(excludes)

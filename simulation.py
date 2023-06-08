@@ -53,7 +53,7 @@ class Simulation:
         #print(f"Thieves Efficiency: {thieves_efficiency}")
         #print(f"Cops Efficiency {cops_efficiency}")
 
-    def perform_game(self, input_flag, render_flag):
+    def perform_game(self, input_flag, render_flag, coop_flag):
         steps = 0
         self.env.reset_game()
         if render_flag:
@@ -61,7 +61,10 @@ class Simulation:
         while not self.env.game_over():
             if input_flag:
                 input("Press Enter to perform a new step...")
-            self.env.move_agents()
+            if coop_flag:
+                self.env.move_agents_coop()
+            else:
+                self.env.move_agents()
             if render_flag:
                 self.env.render()
             steps += 1
@@ -76,9 +79,9 @@ class Simulation:
 
         return steps
 
-    def perform_simulation(self, input_flag, render_flag, num_games):
+    def perform_simulation(self, input_flag, render_flag, coop_flag, num_games):
         for id in range(1, num_games+1):
-            steps = self.perform_game(input_flag, render_flag)
+            steps = self.perform_game(input_flag, render_flag, coop_flag)
             self.game_stats(id, steps)
         print(f"====== [Final Results] ======")
         print(f"Thieves Win Ratio: {(self.thieves_wins / num_games * 100):.2f}%")

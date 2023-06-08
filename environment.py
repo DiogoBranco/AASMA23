@@ -27,6 +27,7 @@ class Environment:
     def get_state(self, agent):
         # Initialize the state as a 2D list of lists
         state = np.zeros((agent.fov*2+1, agent.fov*2+1))  # Create an array with the same shape as the FOV grid
+
         for dx in range(-agent.fov, agent.fov + 1):
             for dy in range(-agent.fov, agent.fov + 1):
                 new_x, new_y = agent.x + dx, agent.y + dy
@@ -48,8 +49,26 @@ class Environment:
                 else:
                     # Write some default representation for cells outside the environment
                     state[dx+agent.fov, dy+agent.fov] = -1  # Or whatever you choose
-        return state
 
+        # Append the states of other agents of the same type
+        same_type_agent_states = self.get_all_agent_states(agent)
+
+        # Stack the agent's state and other agent states along a new dimension
+        full_state = np.stack([state] + same_type_agent_states, axis=0)
+        
+        return full_state
+
+    def get_all_agent_states(self, agent):
+        agent_states = []
+        if isinstance(agent, Thief):
+            for thief in self.thieves:
+                if thief != agent:
+                    agent_states.append(self.get_state(thief))
+        elif isinstance(agent, Cop):
+            for cop in self.cops:
+                if cop != agent:
+                    agent_states.append(self.get_state(cop))
+        return agent_states
 
     def surrounded(self, x, y, entity_types):
         if not entity_types:
@@ -153,6 +172,26 @@ class Environment:
                         reward = self.calculate_reward(agent, direction)
                         self.perform_move(agent, direction)
                         next_state = self.get_state(agent)  # Get state of the agent after action
+                        agent.remember(state, self.move_to_int(direction), reward, next_state, self.game_over()) # assuming these are defined appropriately
+                        break
+                    excludes.append(direction)
+                    
+    def move_agents_coop(self):
+        agents = random.sample(self.active_thieves, len(self.active_thieves)) + random.sample(self.cops, len(self.cops))
+        for agent in agents:
+            for _ in range(agent.speed):
+                excludes = []
+                while True:
+                    state = self.get_state(agent)
+                    other_agent_states = [self.get_state(other_agent) for other_agent in self.agents if other_agent != agent]
+                    state = np.append(state, other_agent_states, axis=0)  # append states of other agents to the current agent's state
+                    direction, excludes = agent.next_move(excludes)
+                    if self.is_valid_move(agent, direction):
+                        reward = self.calculate_reward(agent, direction)
+                        self.perform_move(agent, direction)
+                        next_state = self.get_state(agent)  # Get state of the agent after action
+                        other_agent_states_2 = [self.get_state(other_agent) for other_agent in self.agents if other_agent != agent]
+                        next_state = np.append(next_state, other_agent_states_2, axis=0)  # append states of other agents to the next state
                         agent.remember(state, self.move_to_int(direction), reward, next_state, self.game_over()) # assuming these are defined appropriately
                         break
                     excludes.append(direction)
