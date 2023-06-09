@@ -25,7 +25,7 @@ class Agent(Entity):
 
         self.action_size = 5 # number of possible moves (left, up, down, right, stay)
 
-        self.memory = deque(maxlen=200000)
+        self.memory = deque(maxlen=10000)
         self.gamma = 0.95 # discount rate
         
         self.epsilon = 1.0  # exploration rate

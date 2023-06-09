@@ -18,7 +18,8 @@ if __name__ == "__main__":
     parser.add_argument("-seed", help="The seed for the random number generator", type=int, default=None)
     parser.add_argument("-input", help="Require input for every step", action="store_true")
     parser.add_argument("-render", help="Render the grid for every step", action="store_true")
-    parser.add_argument("-games", help="Require input for every step", type=int, default=1)
+    parser.add_argument("-train-games", help="Number of training games", type=int, default=1)
+    parser.add_argument("-test-games", help="Number of testing games", type=int, default=1)
 
     args = parser.parse_args()
 
@@ -26,4 +27,4 @@ if __name__ == "__main__":
         random.seed(args.seed)
 
     sim = Simulation(args.size, args.thieves, args.thieves_fov, args.thieves_speed, args.cops, args.cops_fov, args.cops_speed, args.items, args.obstacles, args.model)
-    sim.perform_simulation(args.input, args.render, args.coop, args.games)
+    sim.perform_simulation(args.input, args.render, args.coop, args.train_games, args.test_games)

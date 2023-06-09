@@ -19,7 +19,7 @@ class Environment:
         self.obstacles = [Obstacle(id) for id in range(num_obstacles)]
 
         self.active_thieves = []
-        self.active_items = []
+        self.active_items = [] 
 
     def within_grid(self, x, y):
         return 0 <= x < self.size and 0 <= y < self.size

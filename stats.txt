@@ -1,0 +1,25 @@
+Params:
+Size = 20
+Thieves = 10 
+Thieves FOV = 1
+Thieves Speed = 1 
+Cops = 10 
+Cops FOV = 1 
+Cops Speed = 1
+Obstacles = 20
+Items = 10
+Train = 100 
+Test = 20
+
+Params:
+Size = 20
+Thieves = 10 
+Thieves FOV = 4
+Thieves Speed = 2 
+Cops = 10 
+Cops FOV = 3 
+Cops Speed = 1
+Obstacles = 20
+Items = 10
+Train = 100 
+Test = 20
