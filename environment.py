@@ -180,7 +180,7 @@ class Environment:
                     state = self.get_state(agent)
                     direction, excludes = agent.learning_move_coop(excludes)
                     if self.is_valid_move(agent, direction):
-                        reward = self.calculate_reward(agent, direction)
+                        reward = self.calculate_reward(agent, direction) + self.calculate_cooperative_reward(agent, direction)
                         self.perform_move(agent, direction)
                         next_state = self.get_state(agent)  # Get state of the agent after action
                         agent.remember(state, self.move_to_int(direction), reward, next_state, self.game_over()) # assuming these are defined appropriately
@@ -251,6 +251,75 @@ class Environment:
         # Add default reward if no other conditions met
         if reward == 0:
             reward = default_reward
+
+        return reward
+
+    def calculate_cooperative_reward(self, agent, direction):
+        dx, dy = self.move_to_delta(direction)
+        new_x, new_y = agent.x + dx, agent.y + dy
+        at_entity = self.grid[new_x][new_y]
+
+        # Define some default reward values
+        default_reward = -5
+        thief_reward = 100
+        item_reward = 100
+        closer_to_cop_penalty = 0
+        closer_to_cop_in_fov_penalty = -40
+        away_from_cop_reward = 0
+        away_from_cop_in_fov_reward = 40
+        closer_to_thief_reward = 0
+        closer_to_thief_in_fov_reward = 40
+        away_from_thief_penalty = 0
+        away_from_thief_in_fov_penalty = -40
+
+        reward = 0
+
+        # If the agent is a Cop and catches a Thief, return a positive reward
+        if isinstance(agent, Cop) and isinstance(at_entity, Thief):
+            reward += thief_reward
+
+        # If the agent is a Thief and finds an Item, return a positive reward
+        if isinstance(agent, Thief) and isinstance(at_entity, Item):
+            reward += item_reward
+
+        # If the agent is a Thief, adjust reward based on distance to Cops
+        if isinstance(agent, Thief):
+            for cop in self.cops:
+                old_distance = agent.manhattan_distance(agent.x, agent.y, cop.x, cop.y)
+                new_distance = agent.manhattan_distance(new_x, new_y, cop.x, cop.y)
+                if new_distance < old_distance:  # The thief is getting closer to the cop
+                    for thief in self.thieves:  # Here we add the perspective of other thieves
+                        if cop in thief.entities_in_fov(Cop):  # If the cop is in another thief's FOV
+                            reward += closer_to_cop_in_fov_penalty
+                        else:
+                            reward += closer_to_cop_penalty
+                elif new_distance > old_distance:  # The thief is getting further from the cop
+                    for thief in self.thieves:  # Here we add the perspective of other thieves
+                        if cop in thief.entities_in_fov(Cop):  # If the cop is in another thief's FOV
+                            reward += away_from_cop_in_fov_reward
+                        else:
+                            reward += away_from_cop_reward
+
+        # If the agent is a Cop, adjust reward based on distance to Thieves
+        if isinstance(agent, Cop):
+            for thief in self.thieves:
+                old_distance = agent.manhattan_distance(agent.x, agent.y, thief.x, thief.y)
+                new_distance = agent.manhattan_distance(new_x, new_y, thief.x, thief.y)
+                if new_distance < old_distance:  # The cop is getting closer to the thief
+                    for cop in self.cops:  # Here we add the perspective of other cops
+                        if thief in cop.entities_in_fov(Thief):  # If the thief is in another cop's FOV
+                            reward += closer_to_thief_in_fov_reward
+                        else:
+                            reward += closer_to_thief_reward
+                elif new_distance > old_distance:  # The cop is getting further from the thief
+                    for cop in self.cops:  # Here we add the perspective of other cops
+                        if thief in cop.entities_in_fov(Thief):  # If the thief is in another cop's FOV
+                            reward += away_from_thief_in_fov_penalty
+                        else:
+                            reward += away_from_thief_penalty
+
+        if reward == 0:
+            reward = default_reward  # If no other reward was given, return a small penalty
 
         return reward
 
